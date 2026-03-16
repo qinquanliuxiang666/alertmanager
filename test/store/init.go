@@ -1,9 +1,9 @@
 package store_test
 
 import (
-	"github.com/yiran15/api-server/base/conf"
-	"github.com/yiran15/api-server/base/data"
-	"github.com/yiran15/api-server/base/log"
+	"github.com/qinquanliuxiang666/alertmanager/base/conf"
+	"github.com/qinquanliuxiang666/alertmanager/base/data"
+	"github.com/qinquanliuxiang666/alertmanager/base/log"
 	"gorm.io/gorm"
 )
 

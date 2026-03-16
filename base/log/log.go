@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/yiran15/api-server/base/conf"
-	"github.com/yiran15/api-server/base/helper"
+	"github.com/qinquanliuxiang666/alertmanager/base/conf"
+	"github.com/qinquanliuxiang666/alertmanager/base/helper"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -21,6 +21,7 @@ func NewLogger() {
 	)
 	logLevelStr := conf.GetLogLevel()
 	timeZone := conf.GetServerTimeZone()
+	logEncoder := conf.GetLogEncoder()
 	cst, err := time.LoadLocation(timeZone)
 	if err != nil {
 		golog.Printf("failed to load location %s: %v, use local time instead", timeZone, err)
@@ -36,13 +37,23 @@ func NewLogger() {
 		StacktraceKey:  "stacktrace",
 		EncodeDuration: zapcore.SecondsDurationEncoder,
 		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.CapitalLevelEncoder,
 		EncodeTime: func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 			enc.AppendString(t.In(cst).Format(time.RFC3339))
 		},
 		EncodeCaller: zapcore.ShortCallerEncoder,
 	}
-	encoder = zapcore.NewJSONEncoder(config)
+
+	switch logEncoder {
+	case "json":
+		encoder = zapcore.NewJSONEncoder(config)
+	case "console":
+		config.EncodeLevel = zapcore.CapitalColorLevelEncoder
+		encoder = zapcore.NewConsoleEncoder(config)
+	default:
+		config.EncodeLevel = zapcore.CapitalColorLevelEncoder
+		encoder = zapcore.NewConsoleEncoder(config)
+	}
+
 	writer = zapcore.AddSync(os.Stdout)
 
 	switch logLevelStr {

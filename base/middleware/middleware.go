@@ -2,10 +2,10 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
-	apitypes "github.com/yiran15/api-server/base/types"
-	"github.com/yiran15/api-server/pkg/casbin"
-	"github.com/yiran15/api-server/pkg/jwt"
-	"github.com/yiran15/api-server/store"
+	apitypes "github.com/qinquanliuxiang666/alertmanager/base/types"
+	"github.com/qinquanliuxiang666/alertmanager/pkg/casbin"
+	"github.com/qinquanliuxiang666/alertmanager/pkg/jwt"
+	"github.com/qinquanliuxiang666/alertmanager/store"
 )
 
 type MiddlewareInterface interface {

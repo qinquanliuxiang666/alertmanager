@@ -4,9 +4,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yiran15/api-server/base/constant"
-	"github.com/yiran15/api-server/base/types"
-	v1 "github.com/yiran15/api-server/service/v1"
+	"github.com/qinquanliuxiang666/alertmanager/base/constant"
+	"github.com/qinquanliuxiang666/alertmanager/base/types"
+	v1 "github.com/qinquanliuxiang666/alertmanager/service/v1"
 )
 
 type ApiController interface {

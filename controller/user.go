@@ -9,8 +9,8 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/yiran15/api-server/base/constant"
-	v1 "github.com/yiran15/api-server/service/v1"
+	"github.com/qinquanliuxiang666/alertmanager/base/constant"
+	v1 "github.com/qinquanliuxiang666/alertmanager/service/v1"
 )
 
 type UserController interface {
@@ -172,12 +172,12 @@ func (receiver *UserControllerImpl) OAuth2LoginController(c *gin.Context) {
 	}
 
 	if err := session.Save(); err != nil {
-		responseError(c, fmt.Errorf("save session failed: %w", err))
+		responseError(nil, c, fmt.Errorf("save session failed: %w", err))
 		return
 	}
 	url, err := receiver.userServicer.OAuth2Login(provider, state)
 	if err != nil {
-		responseError(c, err)
+		responseError(nil, c, err)
 		return
 	}
 	c.Redirect(http.StatusFound, url)
@@ -198,11 +198,11 @@ func (receiver *UserControllerImpl) OAuth2CallbackController(c *gin.Context) {
 	providerSession := session.Get("provider")
 	state := c.Query("state")
 	if state == "" {
-		responseError(c, errors.New("state is empty"))
+		responseError(nil, c, errors.New("state is empty"))
 		return
 	}
 	if state != stateSession {
-		responseError(c, errors.New("state invalid"))
+		responseError(nil, c, errors.New("state invalid"))
 		return
 	}
 	var providerStr string
@@ -212,7 +212,7 @@ func (receiver *UserControllerImpl) OAuth2CallbackController(c *gin.Context) {
 		}
 	}
 	if providerStr == "" {
-		responseError(c, errors.New("provider is empty"))
+		responseError(nil, c, errors.New("provider is empty"))
 		return
 	}
 	ctx := context.WithValue(c.Request.Context(), constant.ProviderContextKey, providerStr)
@@ -246,11 +246,11 @@ func (receiver *UserControllerImpl) OAuth2ActivateController(c *gin.Context) {
 	stateSession := session.Get("state")
 	state := c.Query("state")
 	if state == "" {
-		responseError(c, errors.New("state is empty"))
+		responseError(nil, c, errors.New("state is empty"))
 		return
 	}
 	if state != stateSession {
-		responseError(c, errors.New("state invalid"))
+		responseError(nil, c, errors.New("state invalid"))
 		return
 	}
 	ResponseWithData(c, receiver.userServicer.OAuth2Activate, bindTypeUri, bindTypeJson)

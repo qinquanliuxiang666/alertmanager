@@ -16,16 +16,24 @@ import (
 )
 
 var (
-	Q          = new(Query)
-	Api        *api
-	CasbinRule *casbinRule
-	Oauth2User *oauth2User
-	Role       *role
-	User       *user
+	Q               = new(Query)
+	AlertChannel    *alertChannel
+	AlertHistory    *alertHistory
+	AlertSendRecord *alertSendRecord
+	AlertTemplate   *alertTemplate
+	Api             *api
+	CasbinRule      *casbinRule
+	Oauth2User      *oauth2User
+	Role            *role
+	User            *user
 )
 
 func SetDefault(db *gorm.DB, opts ...gen.DOOption) {
 	*Q = *Use(db, opts...)
+	AlertChannel = &Q.AlertChannel
+	AlertHistory = &Q.AlertHistory
+	AlertSendRecord = &Q.AlertSendRecord
+	AlertTemplate = &Q.AlertTemplate
 	Api = &Q.Api
 	CasbinRule = &Q.CasbinRule
 	Oauth2User = &Q.Oauth2User
@@ -35,35 +43,47 @@ func SetDefault(db *gorm.DB, opts ...gen.DOOption) {
 
 func Use(db *gorm.DB, opts ...gen.DOOption) *Query {
 	return &Query{
-		db:         db,
-		Api:        newApi(db, opts...),
-		CasbinRule: newCasbinRule(db, opts...),
-		Oauth2User: newOauth2User(db, opts...),
-		Role:       newRole(db, opts...),
-		User:       newUser(db, opts...),
+		db:              db,
+		AlertChannel:    newAlertChannel(db, opts...),
+		AlertHistory:    newAlertHistory(db, opts...),
+		AlertSendRecord: newAlertSendRecord(db, opts...),
+		AlertTemplate:   newAlertTemplate(db, opts...),
+		Api:             newApi(db, opts...),
+		CasbinRule:      newCasbinRule(db, opts...),
+		Oauth2User:      newOauth2User(db, opts...),
+		Role:            newRole(db, opts...),
+		User:            newUser(db, opts...),
 	}
 }
 
 type Query struct {
 	db *gorm.DB
 
-	Api        api
-	CasbinRule casbinRule
-	Oauth2User oauth2User
-	Role       role
-	User       user
+	AlertChannel    alertChannel
+	AlertHistory    alertHistory
+	AlertSendRecord alertSendRecord
+	AlertTemplate   alertTemplate
+	Api             api
+	CasbinRule      casbinRule
+	Oauth2User      oauth2User
+	Role            role
+	User            user
 }
 
 func (q *Query) Available() bool { return q.db != nil }
 
 func (q *Query) clone(db *gorm.DB) *Query {
 	return &Query{
-		db:         db,
-		Api:        q.Api.clone(db),
-		CasbinRule: q.CasbinRule.clone(db),
-		Oauth2User: q.Oauth2User.clone(db),
-		Role:       q.Role.clone(db),
-		User:       q.User.clone(db),
+		db:              db,
+		AlertChannel:    q.AlertChannel.clone(db),
+		AlertHistory:    q.AlertHistory.clone(db),
+		AlertSendRecord: q.AlertSendRecord.clone(db),
+		AlertTemplate:   q.AlertTemplate.clone(db),
+		Api:             q.Api.clone(db),
+		CasbinRule:      q.CasbinRule.clone(db),
+		Oauth2User:      q.Oauth2User.clone(db),
+		Role:            q.Role.clone(db),
+		User:            q.User.clone(db),
 	}
 }
 
@@ -77,30 +97,42 @@ func (q *Query) WriteDB() *Query {
 
 func (q *Query) ReplaceDB(db *gorm.DB) *Query {
 	return &Query{
-		db:         db,
-		Api:        q.Api.replaceDB(db),
-		CasbinRule: q.CasbinRule.replaceDB(db),
-		Oauth2User: q.Oauth2User.replaceDB(db),
-		Role:       q.Role.replaceDB(db),
-		User:       q.User.replaceDB(db),
+		db:              db,
+		AlertChannel:    q.AlertChannel.replaceDB(db),
+		AlertHistory:    q.AlertHistory.replaceDB(db),
+		AlertSendRecord: q.AlertSendRecord.replaceDB(db),
+		AlertTemplate:   q.AlertTemplate.replaceDB(db),
+		Api:             q.Api.replaceDB(db),
+		CasbinRule:      q.CasbinRule.replaceDB(db),
+		Oauth2User:      q.Oauth2User.replaceDB(db),
+		Role:            q.Role.replaceDB(db),
+		User:            q.User.replaceDB(db),
 	}
 }
 
 type queryCtx struct {
-	Api        IApiDo
-	CasbinRule ICasbinRuleDo
-	Oauth2User IOauth2UserDo
-	Role       IRoleDo
-	User       IUserDo
+	AlertChannel    IAlertChannelDo
+	AlertHistory    IAlertHistoryDo
+	AlertSendRecord IAlertSendRecordDo
+	AlertTemplate   IAlertTemplateDo
+	Api             IApiDo
+	CasbinRule      ICasbinRuleDo
+	Oauth2User      IOauth2UserDo
+	Role            IRoleDo
+	User            IUserDo
 }
 
 func (q *Query) WithContext(ctx context.Context) *queryCtx {
 	return &queryCtx{
-		Api:        q.Api.WithContext(ctx),
-		CasbinRule: q.CasbinRule.WithContext(ctx),
-		Oauth2User: q.Oauth2User.WithContext(ctx),
-		Role:       q.Role.WithContext(ctx),
-		User:       q.User.WithContext(ctx),
+		AlertChannel:    q.AlertChannel.WithContext(ctx),
+		AlertHistory:    q.AlertHistory.WithContext(ctx),
+		AlertSendRecord: q.AlertSendRecord.WithContext(ctx),
+		AlertTemplate:   q.AlertTemplate.WithContext(ctx),
+		Api:             q.Api.WithContext(ctx),
+		CasbinRule:      q.CasbinRule.WithContext(ctx),
+		Oauth2User:      q.Oauth2User.WithContext(ctx),
+		Role:            q.Role.WithContext(ctx),
+		User:            q.User.WithContext(ctx),
 	}
 }
 

@@ -17,7 +17,7 @@ import (
 
 	"gorm.io/plugin/dbresolver"
 
-	"github.com/yiran15/api-server/model"
+	"github.com/qinquanliuxiang666/alertmanager/model"
 )
 
 func newCasbinRule(db *gorm.DB, opts ...gen.DOOption) casbinRule {

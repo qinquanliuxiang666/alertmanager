@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/yiran15/api-server/cmd"
+	"github.com/qinquanliuxiang666/alertmanager/cmd"
 )
 
 // @title           Swagger API

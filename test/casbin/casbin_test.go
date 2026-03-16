@@ -4,10 +4,10 @@ import (
 	"testing"
 
 	casbinv2 "github.com/casbin/casbin/v2"
-	"github.com/yiran15/api-server/base/conf"
-	"github.com/yiran15/api-server/base/data"
-	"github.com/yiran15/api-server/model"
-	"github.com/yiran15/api-server/pkg/casbin"
+	"github.com/qinquanliuxiang666/alertmanager/base/conf"
+	"github.com/qinquanliuxiang666/alertmanager/base/data"
+	"github.com/qinquanliuxiang666/alertmanager/model"
+	"github.com/qinquanliuxiang666/alertmanager/pkg/casbin"
 )
 
 var (

@@ -6,9 +6,9 @@ import (
 
 	"github.com/gin-contrib/requestid"
 	"github.com/gin-gonic/gin"
-	"github.com/yiran15/api-server/base/constant"
-	"github.com/yiran15/api-server/pkg/jwt"
-	"github.com/yiran15/api-server/store"
+	"github.com/qinquanliuxiang666/alertmanager/base/constant"
+	"github.com/qinquanliuxiang666/alertmanager/pkg/jwt"
+	"github.com/qinquanliuxiang666/alertmanager/store"
 	"go.uber.org/zap"
 )
 

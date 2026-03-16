@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yiran15/api-server/base/helper"
-	"github.com/yiran15/api-server/base/log"
-	"github.com/yiran15/api-server/base/types"
-	"github.com/yiran15/api-server/model"
+	"github.com/qinquanliuxiang666/alertmanager/base/helper"
+	"github.com/qinquanliuxiang666/alertmanager/base/log"
+	"github.com/qinquanliuxiang666/alertmanager/base/types"
+	"github.com/qinquanliuxiang666/alertmanager/model"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -122,7 +122,7 @@ func (receiver *ApiService) ListApi(ctx context.Context, req *types.ApiListReque
 			return nil, err
 		}
 	} else {
-		if apis, err = sql.Limit(req.PageSize).Offset(req.Page - 1*req.PageSize).Find(); err != nil {
+		if apis, err = sql.Limit(req.PageSize).Offset((req.Page - 1) * req.PageSize).Find(); err != nil {
 			return nil, err
 		}
 	}

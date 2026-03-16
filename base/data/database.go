@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/spf13/viper"
-	"github.com/yiran15/api-server/base/conf"
-	"github.com/yiran15/api-server/store"
+	"github.com/qinquanliuxiang666/alertmanager/base/conf"
+	"github.com/qinquanliuxiang666/alertmanager/store"
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"

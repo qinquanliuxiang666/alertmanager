@@ -2,13 +2,16 @@ package cache_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
+	"github.com/qinquanliuxiang666/alertmanager/base/conf"
+	"github.com/qinquanliuxiang666/alertmanager/base/constant"
+	"github.com/qinquanliuxiang666/alertmanager/base/data"
+	"github.com/qinquanliuxiang666/alertmanager/base/log"
+	"github.com/qinquanliuxiang666/alertmanager/store"
 	"github.com/redis/go-redis/v9"
-	"github.com/yiran15/api-server/base/conf"
-	"github.com/yiran15/api-server/base/data"
-	"github.com/yiran15/api-server/base/log"
-	"github.com/yiran15/api-server/store"
 	"go.uber.org/zap"
 )
 
@@ -48,4 +51,20 @@ func TestCacheStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	zap.L().Info("roles", zap.Any("roles", roles))
+}
+
+func TestSub(t *testing.T) {
+	cacheStore.Subscribe(context.Background(), constant.AlertChannelTopicDelete, func(msg string) {
+		fmt.Printf("删除事件, %s\n", msg)
+	})
+	cacheStore.Subscribe(context.Background(), constant.AlertChannelTopicUpdate, func(msg string) {
+		fmt.Printf("更新事件, %s\n", msg)
+	})
+
+	cacheStore.Publish(context.Background(), constant.AlertChannelTopicDelete, "delete Channnel test")
+	cacheStore.Publish(context.Background(), constant.AlertChannelTopicUpdate, "update Channne test")
+
+	time.Sleep(10 * time.Second)
+	cacheStore.Publish(context.Background(), constant.AlertChannelTopicDelete, "delete Channnel test1")
+	time.Sleep(10 * time.Second)
 }

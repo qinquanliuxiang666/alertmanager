@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yiran15/api-server/base/conf"
-	"github.com/yiran15/api-server/base/constant"
-	"github.com/yiran15/api-server/base/router"
-	apitypes "github.com/yiran15/api-server/base/types"
-	"github.com/yiran15/api-server/controller"
+	"github.com/qinquanliuxiang666/alertmanager/base/conf"
+	"github.com/qinquanliuxiang666/alertmanager/base/constant"
+	"github.com/qinquanliuxiang666/alertmanager/base/router"
+	apitypes "github.com/qinquanliuxiang666/alertmanager/base/types"
+	"github.com/qinquanliuxiang666/alertmanager/controller"
 	"go.uber.org/zap"
 )
 
@@ -63,6 +63,7 @@ func NewHttpServer(r router.RouterInterface) (*gin.Engine, error) {
 	engine := gin.New()
 	controller.NewValidator()
 
+	// 注册路由
 	r.RegisterRouter(engine)
 	var apiData apitypes.ServerApiData
 	apiData.ApiInfo = make(map[string][]apitypes.ApiInfo)

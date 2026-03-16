@@ -9,8 +9,10 @@ import (
 	"github.com/gin-contrib/requestid"
 	"github.com/gin-gonic/gin"
 	"github.com/go-sql-driver/mysql"
-	"github.com/yiran15/api-server/base/constant"
-	"github.com/yiran15/api-server/base/types"
+	"github.com/qinquanliuxiang666/alertmanager/base/constant"
+	"github.com/qinquanliuxiang666/alertmanager/base/log"
+	"github.com/qinquanliuxiang666/alertmanager/base/types"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -70,7 +72,7 @@ func ResponseWithData[T any, R any](c *gin.Context, handler HandlerData[T, R], b
 	}
 
 	if data, err = handler(c.Request.Context(), req); err != nil {
-		responseError(c, err)
+		responseError(req, c, err)
 		return
 	}
 
@@ -86,7 +88,7 @@ func ResponseOnlySuccess[T any](c *gin.Context, handler HandlerErr[T], bindTypes
 	}
 
 	if err := handler(c.Request.Context(), req); err != nil {
-		responseError(c, err)
+		responseError(req, c, err)
 		return
 	}
 
@@ -101,7 +103,7 @@ func ResponseWithDataNoBind[R any](c *gin.Context, handler Handler[R]) {
 		err  error
 	)
 	if data, err = handler(c.Request.Context()); err != nil {
-		responseError(c, err)
+		responseError(nil, c, err)
 		return
 	}
 
@@ -112,16 +114,17 @@ type HandlerErrNoBind func(ctx context.Context) error
 
 func ResponseNoBind(c *gin.Context, handler HandlerErrNoBind) {
 	if err := handler(c.Request.Context()); err != nil {
-		responseError(c, err)
+		responseError(nil, c, err)
 		return
 	}
 	responseSuccess(c, nil)
 }
 
-func responseError(c *gin.Context, err error) {
+func responseError(req any, c *gin.Context, err error) {
 	code, err := getErr(err)
 	c.JSON(code, types.NewResponseWithOpts(code, types.WithError(err.Error())))
 	c.Error(err)
+	log.WithRequestID(c.Request.Context()).Debug("打印 body", zap.Any("body", req))
 }
 
 func responseSuccess(c *gin.Context, data any) {

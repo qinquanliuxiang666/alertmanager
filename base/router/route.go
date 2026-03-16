@@ -9,11 +9,11 @@ import (
 	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/qinquanliuxiang666/alertmanager/base/middleware"
+	"github.com/qinquanliuxiang666/alertmanager/controller"
+	_ "github.com/qinquanliuxiang666/alertmanager/docs"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-	"github.com/yiran15/api-server/base/middleware"
-	"github.com/yiran15/api-server/controller"
-	_ "github.com/yiran15/api-server/docs"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -23,22 +23,32 @@ type RouterInterface interface {
 }
 
 type Router struct {
-	userRouter controller.UserController
-	roleRouter controller.RoleController
-	apiRouter  controller.ApiController
-	middleware middleware.MiddlewareInterface
+	userRouter    controller.UserController
+	roleRouter    controller.RoleController
+	apiRouter     controller.ApiController
+	middleware    middleware.MiddlewareInterface
+	alertmanager  controller.AlertManagerController
+	alertTemplate controller.AlertTemplateController
+	alertChannel  controller.AlertChannelController
 }
 
 func NewRouter(
 	userRouter controller.UserController,
 	roleRouter controller.RoleController,
 	apiRouter controller.ApiController,
-	middleware middleware.MiddlewareInterface) *Router {
+	alertmanager controller.AlertManagerController,
+	middleware middleware.MiddlewareInterface,
+	alertTemplate controller.AlertTemplateController,
+	alertChannel controller.AlertChannelController,
+) *Router {
 	return &Router{
-		userRouter: userRouter,
-		roleRouter: roleRouter,
-		apiRouter:  apiRouter,
-		middleware: middleware,
+		userRouter:    userRouter,
+		roleRouter:    roleRouter,
+		apiRouter:     apiRouter,
+		middleware:    middleware,
+		alertmanager:  alertmanager,
+		alertTemplate: alertTemplate,
+		alertChannel:  alertChannel,
 	}
 }
 
@@ -76,6 +86,9 @@ func (r *Router) RegisterRouter(engine *gin.Engine) {
 	r.registerUserRouter(apiGroup)
 	r.registerRoleRouter(apiGroup)
 	r.registerApiRouter(apiGroup)
+	r.registerAlertmanagerRouter(apiGroup)
+	r.registerAlertTemplateRouter(apiGroup)
+	r.registerAlertChannelRouter(apiGroup)
 }
 
 func (r *Router) registerUserRouter(apiGroup *gin.RouterGroup) {
@@ -117,7 +130,39 @@ func (r *Router) registerApiRouter(apiGroup *gin.RouterGroup) {
 		baseGroup.DELETE("/:id", r.apiRouter.DeleteApi)
 		baseGroup.GET("/:id", r.apiRouter.QueryApi)
 		baseGroup.GET("", r.apiRouter.ListApi)
+	}
+}
 
+func (r *Router) registerAlertmanagerRouter(apiGroup *gin.RouterGroup) {
+	baseGroup := apiGroup.Group("/alerts")
+	{
+		baseGroup.POST("", r.alertmanager.ReceiveAlerts)
+		baseGroup.GET("/:id", r.alertmanager.ReceiveAlerts)
+		baseGroup.GET("", r.alertmanager.ReceiveAlerts)
+	}
+}
+
+func (r *Router) registerAlertTemplateRouter(apiGroup *gin.RouterGroup) {
+	baseGroup := apiGroup.Group("/alertTemplate")
+	{
+		baseGroup.Use(r.middleware.Auth(), r.middleware.AuthZ())
+		baseGroup.POST("", r.alertTemplate.CreateAlertTemplate)
+		baseGroup.PUT("/:id", r.alertTemplate.UpdateAlertTemplate)
+		baseGroup.DELETE("/:id", r.alertTemplate.DeleteAlertTemplate)
+		baseGroup.GET("/:id", r.alertTemplate.QueryAlertTemplate)
+		baseGroup.GET("", r.alertTemplate.ListAlertTemplate)
+	}
+}
+
+func (r *Router) registerAlertChannelRouter(apiGroup *gin.RouterGroup) {
+	baseGroup := apiGroup.Group("/alertChannel")
+	{
+		baseGroup.Use(r.middleware.Auth(), r.middleware.AuthZ())
+		baseGroup.POST("", r.alertChannel.CreateAlertChannel)
+		baseGroup.PUT("/:id", r.alertChannel.UpdateAlertChannel)
+		baseGroup.DELETE("/:id", r.alertChannel.DeleteAlertChannel)
+		baseGroup.GET("/:id", r.alertChannel.QueryAlertChannel)
+		baseGroup.GET("", r.alertChannel.ListAlertChannel)
 	}
 }
 

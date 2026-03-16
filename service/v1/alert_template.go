@@ -1,0 +1,177 @@
+package v1
+
+import (
+	"context"
+	"encoding/base64"
+	"errors"
+	"fmt"
+
+	"github.com/qinquanliuxiang666/alertmanager/base/helper"
+	"github.com/qinquanliuxiang666/alertmanager/base/types"
+	"github.com/qinquanliuxiang666/alertmanager/model"
+	"github.com/qinquanliuxiang666/alertmanager/store"
+	"gorm.io/gorm"
+)
+
+type AlertTemplateServicer interface {
+	CreateAlerTemplate(ctx context.Context, req *types.AlertTemplateCreateRequest) error
+	UpdateTemplate(ctx context.Context, req *types.AlertTemplateUpdateRequest) error
+	DeleteTemplate(ctx context.Context, req *types.IDRequest) error
+	QueryTemplate(ctx context.Context, req *types.IDRequest) (*model.AlertTemplate, error)
+	ListTemplate(ctx context.Context, req *types.AlertTemplateListRequest) (*types.AlertTemplateListResponse, error)
+}
+
+type alertTemplateService struct {
+	cache store.CacheStorer
+}
+
+func NewAlertTemplateServicer(cache store.CacheStorer) AlertTemplateServicer {
+	return &alertTemplateService{
+		cache: cache,
+	}
+}
+
+func (receiver *alertTemplateService) CreateAlerTemplate(ctx context.Context, req *types.AlertTemplateCreateRequest) error {
+	storeObj, err := at.WithContext(ctx).Where(at.Name.Eq(req.Name)).First()
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
+	if storeObj != nil {
+		return fmt.Errorf("%s AlertTemplate 已经存在, 创建失败", req.Name)
+	}
+
+	templateBy, err := base64.StdEncoding.DecodeString(req.Template)
+	if err != nil {
+		return fmt.Errorf("base64 解密 Template 失败, %s", err)
+	}
+
+	var aggTemplateBy []byte
+	if req.AggregationTemplate != "" {
+		aggTemplateBy, err = base64.StdEncoding.DecodeString(req.AggregationTemplate)
+		if err != nil {
+			return fmt.Errorf("base64 解密 AggregationTemplate 失败, %s", err)
+		}
+	}
+
+	saveObj := &model.AlertTemplate{
+		Name:                req.Name,
+		Description:         req.Description,
+		Template:            string(templateBy),
+		AggregationTemplate: string(aggTemplateBy),
+	}
+	return at.WithContext(ctx).Create(saveObj)
+}
+
+func (receiver *alertTemplateService) UpdateTemplate(ctx context.Context, req *types.AlertTemplateUpdateRequest) error {
+	obj, err := at.WithContext(ctx).Where(at.ID.Eq(int(req.ID))).First()
+	if err != nil {
+		return err
+	}
+
+	templateBy, err := base64.StdEncoding.DecodeString(req.Template)
+	if err != nil {
+		return fmt.Errorf("base64 解密 Template 失败, %s", err)
+	}
+
+	var aggTemplateBy []byte
+	if req.AggregationTemplate != "" {
+		aggTemplateBy, err = base64.StdEncoding.DecodeString(req.AggregationTemplate)
+		if err != nil {
+			return fmt.Errorf("base64 解密 AggregationTemplate 失败, %s", err)
+		}
+	}
+
+	obj.Template = string(templateBy)
+	obj.AggregationTemplate = string(aggTemplateBy)
+	obj.Description = req.Description
+
+	var acObj *model.AlertChannel
+	acObj, err = ac.WithContext(ctx).Where(ac.AlertTemplateID.Eq(int(req.ID))).First()
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		return at.WithContext(ctx).Save(obj)
+	}
+
+	return store.Q.Transaction(func(tx *store.Query) error {
+		if acObj == nil {
+			return fmt.Errorf("更新模版失败, 关联的 AlertChannel 不存在")
+		}
+		acObj.AlertTemplate = obj
+		if err := receiver.cache.DelKey(ctx, store.AlertType, acObj.Name); err != nil {
+			return err
+		}
+		if err := receiver.cache.SetObject(ctx, store.AlertType, acObj.Name, acObj, store.NeverExpires); err != nil {
+			return err
+		}
+		return tx.AlertTemplate.WithContext(ctx).Save(obj)
+	})
+}
+
+func (receiver *alertTemplateService) DeleteTemplate(ctx context.Context, req *types.IDRequest) error {
+	_, err := at.WithContext(ctx).Where(at.ID.Eq(int(req.ID))).First()
+	if err != nil {
+		return err
+	}
+
+	acObj, err := ac.WithContext(ctx).Where(ac.AlertTemplateID.Eq(int(req.ID))).First()
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
+	if err == nil {
+		return fmt.Errorf("当前模板已绑定 [%s] 告警通道，请先解除绑定", acObj.Name)
+	}
+
+	if _, err := at.WithContext(ctx).Where(at.ID.Eq(int(req.ID))).Delete(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (receiver *alertTemplateService) QueryTemplate(ctx context.Context, req *types.IDRequest) (*model.AlertTemplate, error) {
+	obj, err := at.WithContext(ctx).Where(at.ID.Eq(int(req.ID))).First()
+	if err != nil {
+		return nil, err
+	}
+
+	return obj, nil
+}
+
+func (receiver *alertTemplateService) ListTemplate(ctx context.Context, req *types.AlertTemplateListRequest) (*types.AlertTemplateListResponse, error) {
+	var (
+		alertTemplates []*model.AlertTemplate
+		total          int64
+		sql            = at.WithContext(ctx)
+		err            error
+	)
+
+	if req.Name != "" {
+		sql = sql.Where(at.Name.Like("%" + req.Name + "%"))
+	}
+
+	if total, err = sql.Count(); err != nil {
+		return nil, err
+	}
+
+	if req.Sort != "" && req.Direction != "" {
+		sort, ok := at.GetFieldByName(req.Sort)
+		if !ok {
+			return nil, fmt.Errorf("invalid sort field: %s", req.Sort)
+		}
+		sql = sql.Order(helper.Sort(sort, req.Direction))
+	}
+
+	if req.PageSize == 0 || req.Page == 0 {
+		if alertTemplates, err = sql.Find(); err != nil {
+			return nil, err
+		}
+	} else {
+		if alertTemplates, err = sql.Limit(req.PageSize).Offset((req.Page - 1) * req.PageSize).Find(); err != nil {
+			return nil, err
+		}
+	}
+	return types.NewAlertTemplateListResponse(alertTemplates, total, req.PageSize, req.Page), nil
+}

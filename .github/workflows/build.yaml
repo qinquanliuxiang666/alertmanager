@@ -63,11 +63,11 @@ jobs:
           file: deploy/Dockerfile
           push: true
           tags: |
-            ${{ vars.DOCKER_HUB }}/qqlx/api-server:${{ env.IMAGE_TAG }}
+            ${{ vars.DOCKER_HUB }}/qqlx/alertmanager:${{ env.IMAGE_TAG }}
             ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}
             ghcr.io/${{ github.repository }}:latest
 
       - name: Output Image Info
         run: |
-          echo "Image pushed: ${{ vars.DOCKER_HUB }}/qqlx/api-server:${{ env.IMAGE_TAG }}"
+          echo "Image pushed: ${{ vars.DOCKER_HUB }}/qqlx/alertmanager:${{ env.IMAGE_TAG }}"
           echo "Image pushed to GitHub Container Registry: ghcr.io/${{ github.repository }}/api-server:${{ env.IMAGE_TAG }}"

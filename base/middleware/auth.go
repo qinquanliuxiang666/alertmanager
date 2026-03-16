@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-contrib/requestid"
 	"github.com/gin-gonic/gin"
-	"github.com/yiran15/api-server/base/constant"
+	"github.com/qinquanliuxiang666/alertmanager/base/constant"
 	"go.uber.org/zap"
 )
 

@@ -1,6 +1,6 @@
 package types
 
-import "github.com/yiran15/api-server/model"
+import "github.com/qinquanliuxiang666/alertmanager/model"
 
 type ApiCreateRequest struct {
 	Name        string `json:"name" binding:"required"`

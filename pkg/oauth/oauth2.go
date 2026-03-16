@@ -9,8 +9,8 @@ import (
 	"net/http"
 
 	"github.com/spf13/viper"
-	"github.com/yiran15/api-server/base/helper"
-	"github.com/yiran15/api-server/model"
+	"github.com/qinquanliuxiang666/alertmanager/base/helper"
+	"github.com/qinquanliuxiang666/alertmanager/model"
 	"golang.org/x/oauth2"
 )
 

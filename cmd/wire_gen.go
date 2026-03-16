@@ -7,18 +7,20 @@
 package cmd
 
 import (
-	"github.com/yiran15/api-server/base/app"
-	"github.com/yiran15/api-server/base/data"
-	"github.com/yiran15/api-server/base/middleware"
-	"github.com/yiran15/api-server/base/router"
-	"github.com/yiran15/api-server/base/server"
-	"github.com/yiran15/api-server/controller"
-	"github.com/yiran15/api-server/pkg/casbin"
-	"github.com/yiran15/api-server/pkg/jwt"
-	"github.com/yiran15/api-server/pkg/local_cache"
-	"github.com/yiran15/api-server/pkg/oauth"
-	"github.com/yiran15/api-server/service/v1"
-	"github.com/yiran15/api-server/store"
+	"github.com/qinquanliuxiang666/alertmanager/base/app"
+	"github.com/qinquanliuxiang666/alertmanager/base/data"
+	"github.com/qinquanliuxiang666/alertmanager/base/middleware"
+	"github.com/qinquanliuxiang666/alertmanager/base/router"
+	"github.com/qinquanliuxiang666/alertmanager/base/server"
+	"github.com/qinquanliuxiang666/alertmanager/controller"
+	"github.com/qinquanliuxiang666/alertmanager/pkg/alert"
+	"github.com/qinquanliuxiang666/alertmanager/pkg/casbin"
+	"github.com/qinquanliuxiang666/alertmanager/pkg/feishu"
+	"github.com/qinquanliuxiang666/alertmanager/pkg/jwt"
+	"github.com/qinquanliuxiang666/alertmanager/pkg/local_cache"
+	"github.com/qinquanliuxiang666/alertmanager/pkg/oauth"
+	"github.com/qinquanliuxiang666/alertmanager/service/v1"
+	"github.com/qinquanliuxiang666/alertmanager/store"
 )
 
 // Injectors from wire.go:
@@ -61,16 +63,24 @@ func InitApplication() (*app.Application, func(), error) {
 	roleController := controller.NewRoleController(roleServicer)
 	apiServicer := v1.NewApiServicer()
 	apiController := controller.NewApiController(apiServicer)
+	alertUtiler := alert.NewAlertUtiler()
+	feishuer := feishu.NewFeiShu(alertUtiler)
+	alertsServicer := v1.NewAlertsServicer(cacheStore, feishuer)
+	alertManagerController := controller.NewAlertManagerController(alertsServicer)
 	authChecker := casbin.NewAuthChecker(enforcer)
 	middlewareMiddleware := middleware.NewMiddleware(generateToken, authChecker, cacheStore)
-	routerRouter := router.NewRouter(userController, roleController, apiController, middlewareMiddleware)
+	alertTemplateServicer := v1.NewAlertTemplateServicer(cacheStore)
+	alertTemplateController := controller.NewAlertTemplateController(alertTemplateServicer)
+	alertChannelServicer := v1.NewChannelServicer(cacheStore)
+	alertChannelController := controller.NewAlertChannelController(alertChannelServicer)
+	routerRouter := router.NewRouter(userController, roleController, apiController, alertManagerController, middlewareMiddleware, alertTemplateController, alertChannelController)
 	engine, err := server.NewHttpServer(routerRouter)
 	if err != nil {
 		cleanup2()
 		cleanup()
 		return nil, nil, err
 	}
-	application := app.NewApplication(engine)
+	application := app.NewApplication(engine, cacheStore, feishuer)
 	return application, func() {
 		cleanup2()
 		cleanup()

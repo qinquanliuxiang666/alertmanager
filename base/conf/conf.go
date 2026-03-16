@@ -12,6 +12,7 @@ import (
 
 const (
 	defaultLoglevel        = "info"
+	defaultLogEncoder      = "console"
 	defaultServerBind      = "0.0.0.0:8080"
 	defaultServerTimeZone  = "Asia/Shanghai"
 	defaultJwtIssuer       = "api-server"
@@ -69,6 +70,14 @@ func GetLogLevel() string {
 		logLevel = defaultLoglevel
 	}
 	return logLevel
+}
+
+func GetLogEncoder() string {
+	logEncoder := viper.GetString("log.encoder")
+	if logEncoder == "" {
+		logEncoder = defaultLogEncoder
+	}
+	return logEncoder
 }
 
 // jwt 配置
@@ -249,4 +258,8 @@ func GetRedisKeyPrefix() (string, error) {
 		return "", fmt.Errorf("redis.keyPrefix is empty")
 	}
 	return prefix, nil
+}
+
+func GetAlertAggregation() bool {
+	return viper.GetBool("alert.aggregation")
 }

@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/yiran15/api-server/base/constant"
-	"github.com/yiran15/api-server/model"
+	"github.com/qinquanliuxiang666/alertmanager/base/constant"
+	"github.com/qinquanliuxiang666/alertmanager/model"
 )
 
 func InArray[T comparable](arr []T, val T) bool {

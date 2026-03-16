@@ -2,15 +2,17 @@ package localcache
 
 import (
 	"fmt"
-	"github.com/yiran15/api-server/base/constant"
 	"time"
 
+	"github.com/qinquanliuxiang666/alertmanager/base/constant"
+
 	gocache "github.com/patrickmn/go-cache"
-	"github.com/yiran15/api-server/pkg/oauth"
+	"github.com/qinquanliuxiang666/alertmanager/pkg/oauth"
 )
 
 type Cacher interface {
 	SetCache(key string, value any, expire time.Duration)
+	UpdateCache(key string, value any, expire time.Duration) error
 	GetCache(key string) (any, error)
 }
 
@@ -36,8 +38,19 @@ func NewCacher(oauth *oauth.OAuth2) Cacher {
 	return cache
 }
 
+// SetCache 如果 key 不存在则创建，如果存在则覆盖。
+// 如果 expire 等于 -1 (gocache.NoExpiration)，则该项永不过期。
 func (receive *Cache) SetCache(key string, value any, expire time.Duration) {
 	receive.cache.Set(key, value, expire)
+}
+
+// UpdateCache 仅当 key 已存在时才更新。如果 key 不存在，将返回错误。
+func (receive *Cache) UpdateCache(key string, value any, expire time.Duration) error {
+	err := receive.cache.Replace(key, value, expire)
+	if err != nil {
+		return fmt.Errorf("failed to update cache: key '%s' does not exist", key)
+	}
+	return nil
 }
 
 func (receive *Cache) GetCache(key string) (any, error) {

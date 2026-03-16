@@ -1,7 +1,7 @@
 package v1
 
 import (
-	"github.com/yiran15/api-server/store"
+	"github.com/qinquanliuxiang666/alertmanager/store"
 )
 
 var (
@@ -10,6 +10,9 @@ var (
 	a      = store.Api
 	c      = store.CasbinRule
 	oauth2 = store.Oauth2User
+	al     = store.AlertHistory
+	ac     = store.AlertChannel
+	at     = store.AlertTemplate
 )
 
 func NewStore() {
@@ -18,4 +21,7 @@ func NewStore() {
 	a = store.Api
 	c = store.CasbinRule
 	oauth2 = store.Oauth2User
+	al = store.AlertHistory
+	ac = store.AlertChannel
+	at = store.AlertTemplate
 }

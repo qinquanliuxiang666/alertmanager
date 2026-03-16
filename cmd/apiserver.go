@@ -10,13 +10,13 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/qinquanliuxiang666/alertmanager/base/conf"
+	"github.com/qinquanliuxiang666/alertmanager/base/constant"
+	baselog "github.com/qinquanliuxiang666/alertmanager/base/log"
+	v1 "github.com/qinquanliuxiang666/alertmanager/service/v1"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"github.com/yiran15/api-server/base/conf"
-	"github.com/yiran15/api-server/base/constant"
-	baselog "github.com/yiran15/api-server/base/log"
-	v1 "github.com/yiran15/api-server/service/v1"
 	"go.uber.org/zap"
 )
 
@@ -76,6 +76,10 @@ func runApp(_ *cobra.Command, _ []string) error {
 	defer cleanup()
 
 	v1.NewStore()
+
+	if err = app.Init(ctx); err != nil {
+		return fmt.Errorf("init application faild: %w", err)
+	}
 
 	if err := app.Run(ctx); err != nil {
 		return fmt.Errorf("run application faild: %w", err)

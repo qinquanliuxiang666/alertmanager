@@ -1,6 +1,6 @@
 package constant
 
-import apitypes "github.com/yiran15/api-server/base/types"
+import apitypes "github.com/qinquanliuxiang666/alertmanager/base/types"
 
 type userContextKey struct{}
 
@@ -15,7 +15,11 @@ var RequestIDContextKey = requestIDContextKey{}
 var ApiData apitypes.ServerApiData
 
 const (
-	FlagConfigPath     = "config-path"
-	EmptyRoleSentinel  = "__empty__"
-	OAuth2ProviderList = "oauth2:provider:list"
+	FlagConfigPath          = "config-path"
+	EmptyRoleSentinel       = "__empty__"
+	OAuth2ProviderList      = "oauth2:provider:list"
+	AlertStatusResolved     = "resolved"
+	AlertStatusFiring       = "firing"
+	AlertChannelTopicUpdate = "alert:channel:update"
+	AlertChannelTopicDelete = "alert:channel:delete"
 )

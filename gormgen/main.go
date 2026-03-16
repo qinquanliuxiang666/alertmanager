@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/yiran15/api-server/base/conf"
-	"github.com/yiran15/api-server/base/data"
-	"github.com/yiran15/api-server/model"
+	"github.com/qinquanliuxiang666/alertmanager/base/conf"
+	"github.com/qinquanliuxiang666/alertmanager/base/data"
+	"github.com/qinquanliuxiang666/alertmanager/model"
 	"gorm.io/gen"
 )
 
@@ -18,7 +18,8 @@ func main() {
 		panic(err)
 	}
 	defer clear()
+	db.AutoMigrate(model.AlertHistory{}, model.AlertChannel{}, model.AlertTemplate{}, model.AlertSendRecord{})
 	g.UseDB(db)
-	g.ApplyBasic(model.User{}, model.Role{}, model.Api{}, model.CasbinRule{}, model.Oauth2User{})
+	g.ApplyBasic(model.User{}, model.Role{}, model.Api{}, model.CasbinRule{}, model.Oauth2User{}, model.AlertHistory{}, model.AlertChannel{}, model.AlertTemplate{}, model.AlertSendRecord{})
 	g.Execute()
 }

@@ -1,7 +1,7 @@
 package types
 
 import (
-	"github.com/yiran15/api-server/model"
+	"github.com/qinquanliuxiang666/alertmanager/model"
 )
 
 type RoleCreateRequest struct {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/yiran15/api-server/base/conf"
+	"github.com/qinquanliuxiang666/alertmanager/base/conf"
 	"go.uber.org/zap"
 )
 
