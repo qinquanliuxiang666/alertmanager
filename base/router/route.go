@@ -27,9 +27,10 @@ type Router struct {
 	roleRouter    controller.RoleController
 	apiRouter     controller.ApiController
 	middleware    middleware.MiddlewareInterface
-	alertmanager  controller.AlertManagerController
+	alert         controller.AlertManagerController
 	alertTemplate controller.AlertTemplateController
 	alertChannel  controller.AlertChannelController
+	alertHistory  controller.AlertHistoryController
 }
 
 func NewRouter(
@@ -40,15 +41,17 @@ func NewRouter(
 	middleware middleware.MiddlewareInterface,
 	alertTemplate controller.AlertTemplateController,
 	alertChannel controller.AlertChannelController,
+	alertHistory controller.AlertHistoryController,
 ) *Router {
 	return &Router{
 		userRouter:    userRouter,
 		roleRouter:    roleRouter,
 		apiRouter:     apiRouter,
 		middleware:    middleware,
-		alertmanager:  alertmanager,
+		alert:         alertmanager,
 		alertTemplate: alertTemplate,
 		alertChannel:  alertChannel,
+		alertHistory:  alertHistory,
 	}
 }
 
@@ -89,6 +92,7 @@ func (r *Router) RegisterRouter(engine *gin.Engine) {
 	r.registerAlertmanagerRouter(apiGroup)
 	r.registerAlertTemplateRouter(apiGroup)
 	r.registerAlertChannelRouter(apiGroup)
+	r.registerHistoryRouter(apiGroup)
 }
 
 func (r *Router) registerUserRouter(apiGroup *gin.RouterGroup) {
@@ -136,9 +140,7 @@ func (r *Router) registerApiRouter(apiGroup *gin.RouterGroup) {
 func (r *Router) registerAlertmanagerRouter(apiGroup *gin.RouterGroup) {
 	baseGroup := apiGroup.Group("/alerts")
 	{
-		baseGroup.POST("", r.alertmanager.ReceiveAlerts)
-		baseGroup.GET("/:id", r.alertmanager.ReceiveAlerts)
-		baseGroup.GET("", r.alertmanager.ReceiveAlerts)
+		baseGroup.POST("", r.alert.ReceiveAlerts)
 	}
 }
 
@@ -163,6 +165,15 @@ func (r *Router) registerAlertChannelRouter(apiGroup *gin.RouterGroup) {
 		baseGroup.DELETE("/:id", r.alertChannel.DeleteAlertChannel)
 		baseGroup.GET("/:id", r.alertChannel.QueryAlertChannel)
 		baseGroup.GET("", r.alertChannel.ListAlertChannel)
+	}
+}
+
+func (r *Router) registerHistoryRouter(apiGroup *gin.RouterGroup) {
+	baseGroup := apiGroup.Group("/alertHistory")
+	{
+		baseGroup.Use(r.middleware.Auth(), r.middleware.AuthZ())
+		baseGroup.GET("/:id", r.alertHistory.QueryAlertHistory)
+		baseGroup.GET("", r.alertHistory.ListAlertHistory)
 	}
 }
 

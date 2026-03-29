@@ -13,6 +13,7 @@ var (
 	al     = store.AlertHistory
 	ac     = store.AlertChannel
 	at     = store.AlertTemplate
+	as     = store.AlertSendRecord
 )
 
 func NewStore() {
@@ -24,4 +25,5 @@ func NewStore() {
 	al = store.AlertHistory
 	ac = store.AlertChannel
 	at = store.AlertTemplate
+	as = store.AlertSendRecord
 }

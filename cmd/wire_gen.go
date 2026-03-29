@@ -13,7 +13,6 @@ import (
 	"github.com/qinquanliuxiang666/alertmanager/base/router"
 	"github.com/qinquanliuxiang666/alertmanager/base/server"
 	"github.com/qinquanliuxiang666/alertmanager/controller"
-	"github.com/qinquanliuxiang666/alertmanager/pkg/alert"
 	"github.com/qinquanliuxiang666/alertmanager/pkg/casbin"
 	"github.com/qinquanliuxiang666/alertmanager/pkg/feishu"
 	"github.com/qinquanliuxiang666/alertmanager/pkg/jwt"
@@ -63,8 +62,7 @@ func InitApplication() (*app.Application, func(), error) {
 	roleController := controller.NewRoleController(roleServicer)
 	apiServicer := v1.NewApiServicer()
 	apiController := controller.NewApiController(apiServicer)
-	alertUtiler := alert.NewAlertUtiler()
-	feishuer := feishu.NewFeiShu(alertUtiler)
+	feishuer := feishu.NewFeiShu()
 	alertsServicer := v1.NewAlertsServicer(cacheStore, feishuer)
 	alertManagerController := controller.NewAlertManagerController(alertsServicer)
 	authChecker := casbin.NewAuthChecker(enforcer)
@@ -73,7 +71,9 @@ func InitApplication() (*app.Application, func(), error) {
 	alertTemplateController := controller.NewAlertTemplateController(alertTemplateServicer)
 	alertChannelServicer := v1.NewChannelServicer(cacheStore)
 	alertChannelController := controller.NewAlertChannelController(alertChannelServicer)
-	routerRouter := router.NewRouter(userController, roleController, apiController, alertManagerController, middlewareMiddleware, alertTemplateController, alertChannelController)
+	alertHistoryServicer := v1.NewHistoryServicer(cacheStore)
+	alertHistoryController := controller.NewAlertHistoryController(alertHistoryServicer)
+	routerRouter := router.NewRouter(userController, roleController, apiController, alertManagerController, middlewareMiddleware, alertTemplateController, alertChannelController, alertHistoryController)
 	engine, err := server.NewHttpServer(routerRouter)
 	if err != nil {
 		cleanup2()

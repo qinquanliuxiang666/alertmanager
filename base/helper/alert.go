@@ -3,6 +3,7 @@ package helper
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/qinquanliuxiang666/alertmanager/model"
 )
@@ -53,4 +54,8 @@ func VerificationAlertConfig(channelName string, channelType model.ChannelType, 
 	default:
 		return fmt.Errorf("%s 告警是不支持的告警类型 %s", channelName, channelType)
 	}
+}
+
+func GetAlertMapKey(fingerprint string, startAt time.Time) string {
+	return fmt.Sprintf("%s-%d", fingerprint, startAt.UnixNano())
 }

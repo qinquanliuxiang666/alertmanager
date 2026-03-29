@@ -26,7 +26,7 @@ type AlertChannelUpdateRequest struct {
 type AlertChannelListRequest struct {
 	*Pagination
 	Name      string `form:"name"`
-	Type      string `json:"type" binding:"omitempty,oneof=feishuApp feishuBoot webhook"`
+	Type      string `form:"type" binding:"omitempty,oneof=feishuApp feishuBoot webhook"`
 	Sort      string `form:"sort" binding:"omitempty,oneof=id name created_at updated_at"`
 	Direction string `form:"direction" binding:"omitempty,oneof=asc desc"`
 }

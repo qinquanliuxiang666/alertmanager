@@ -2,13 +2,9 @@ package store_test
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
-	"time"
 
-	"github.com/qinquanliuxiang666/alertmanager/base/types"
 	"github.com/qinquanliuxiang666/alertmanager/model"
-	"github.com/qinquanliuxiang666/alertmanager/pkg/alert"
 	"github.com/qinquanliuxiang666/alertmanager/store"
 )
 
@@ -43,19 +39,3 @@ const (
 	alerts = `{"FiringErr":null,"ResolvedErr":null,"FiringAlerts":[{"status":"firing","labels":{"alertgroup":"ContainerMemoryAlerts","alertname":"ContainerMemoryUsageHigh","beta_kubernetes_io_arch":"amd64","beta_kubernetes_io_instance_type":"rke2","beta_kubernetes_io_os":"linux","cluster":"local","container":"cilium-agent","id":"/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod193c20d9_34af_4b69_b119_2e75aa9023d1.slice/cri-containerd-423f66c54536da89e0a167ccd93719299bcebf99a7e948f6fa02640116f90f04.scope","image":"docker.io/rancher/mirrored-cilium-cilium:v1.18.1","instance":"node0","job":"cadvisor","kubernetes_io_arch":"amd64","kubernetes_io_hostname":"node0","kubernetes_io_os":"linux","metrics_path":"/metrics/cadvisor","name":"423f66c54536da89e0a167ccd93719299bcebf99a7e948f6fa02640116f90f04","namespace":"kube-system","node":"node0","node_kubernetes_io_instance_type":"rke2","node_role_kubernetes_io_control_plane":"true","node_role_kubernetes_io_etcd":"true","node_role_kubernetes_io_master":"true","pod":"cilium-95zkx","severity":"critical","team":"infrastructure","vmagent_ha":"monitoring/vm-agent"},"annotations":{"description":"Pod cilium-95zkx (命名空间: kube-system) 的容器内存使用量已超过 300MB (当前值: 465.72 MB)","summary":"容器内存使用过高 (cilium-95zkx)"},"startsAt":"2026-03-29T09:48:10Z","endsAt":"0001-01-01T00:00:00Z","generatorURL":"http://vmalert-vm-alert-778d57f7dd-lk89b:8080/vmalert/alert?group_id=5943003096686295237\u0026alert_id=16824412172183142391","fingerprint":"155d534f493b04b7"},{"status":"firing","labels":{"alertgroup":"ContainerMemoryAlerts","alertname":"ContainerMemoryUsageHigh","beta_kubernetes_io_arch":"amd64","beta_kubernetes_io_instance_type":"rke2","beta_kubernetes_io_os":"linux","cluster":"local","container":"kube-apiserver","id":"/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod021ef3e1fb15e22f61d582ef276f3303.slice/cri-containerd-c67122e22cbb94b59df95c7d732e5e1b7023785c46867e859fc3f5420fe0450d.scope","image":"docker.io/rancher/hardened-kubernetes:v1.33.5-rke2r1-build20250910","instance":"node0","job":"cadvisor","kubernetes_io_arch":"amd64","kubernetes_io_hostname":"node0","kubernetes_io_os":"linux","metrics_path":"/metrics/cadvisor","name":"c67122e22cbb94b59df95c7d732e5e1b7023785c46867e859fc3f5420fe0450d","namespace":"kube-system","node":"node0","node_kubernetes_io_instance_type":"rke2","node_role_kubernetes_io_control_plane":"true","node_role_kubernetes_io_etcd":"true","node_role_kubernetes_io_master":"true","pod":"kube-apiserver-node0","severity":"critical","team":"infrastructure","vmagent_ha":"monitoring/vm-agent"},"annotations":{"description":"Pod kube-apiserver-node0 (命名空间: kube-system) 的容器内存使用量已超过 300MB (当前值: 452.94 MB)","summary":"容器内存使用过高 (kube-apiserver-node0)"},"startsAt":"2026-03-29T09:48:10Z","endsAt":"0001-01-01T00:00:00Z","generatorURL":"http://vmalert-vm-alert-778d57f7dd-lk89b:8080/vmalert/alert?group_id=5943003096686295237\u0026alert_id=8277272836017799481","fingerprint":"64cca14012f123b1"},{"status":"firing","labels":{"alertgroup":"ContainerMemoryAlerts","alertname":"ContainerMemoryUsageHigh","beta_kubernetes_io_arch":"amd64","beta_kubernetes_io_instance_type":"rke2","beta_kubernetes_io_os":"linux","cluster":"local","container":"cilium-agent","id":"/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod543abf76_51b4_4bc1_bef7_3d7267535443.slice/cri-containerd-b3efc3e00b5240f0b986816059db7ad8b28621d614f255e2feb6705bfe497406.scope","image":"docker.io/rancher/mirrored-cilium-cilium:v1.18.1","instance":"node1","job":"cadvisor","kubernetes_io_arch":"amd64","kubernetes_io_hostname":"node1","kubernetes_io_os":"linux","metrics_path":"/metrics/cadvisor","name":"b3efc3e00b5240f0b986816059db7ad8b28621d614f255e2feb6705bfe497406","namespace":"kube-system","node":"node1","node_kubernetes_io_instance_type":"rke2","pod":"cilium-gbxb9","severity":"critical","team":"infrastructure","vmagent_ha":"monitoring/vm-agent"},"annotations":{"description":"Pod cilium-gbxb9 (命名空间: kube-system) 的容器内存使用量已超过 300MB (当前值: 472.28 MB)","summary":"容器内存使用过高 (cilium-gbxb9)"},"startsAt":"2026-03-29T09:48:10Z","endsAt":"0001-01-01T00:00:00Z","generatorURL":"http://vmalert-vm-alert-778d57f7dd-lk89b:8080/vmalert/alert?group_id=5943003096686295237\u0026alert_id=16450287045786006782","fingerprint":"57bacb6022b4386b"}],"ResolvedAlerts":[]}
 `
 )
-
-func TestAL(t *testing.T) {
-	var c *model.AlertChannel
-	var cc *types.HandleAggregationSendResult
-	if err := json.Unmarshal([]byte(channel), &c); err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal([]byte(alerts), &cc); err != nil {
-		t.Fatal(err)
-	}
-
-	receiver := alert.NewAlertUtiler()
-	receiver.SaveAggregationAlert(context.Background(), c, cc)
-
-	time.Sleep(1 * time.Hour)
-}

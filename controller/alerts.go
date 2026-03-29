@@ -7,8 +7,6 @@ import (
 
 type AlertManagerController interface {
 	ReceiveAlerts(c *gin.Context)
-	QueryAlerts(c *gin.Context)
-	ListAlerts(c *gin.Context)
 }
 
 type alertManagerController struct {
@@ -39,12 +37,4 @@ func (receiver *alertManagerController) ReceiveAlerts(c *gin.Context) {
 	// fmt.Println(string(d))
 	// fmt.Println("🌙------------------------------------🌙")
 	// c.JSON(200, req)
-}
-
-func (receiver *alertManagerController) QueryAlerts(c *gin.Context) {
-
-}
-
-func (receiver *alertManagerController) ListAlerts(c *gin.Context) {
-
 }

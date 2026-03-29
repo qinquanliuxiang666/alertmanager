@@ -26,7 +26,6 @@ import (
 	"github.com/qinquanliuxiang666/alertmanager/base/log"
 	"github.com/qinquanliuxiang666/alertmanager/base/types"
 	"github.com/qinquanliuxiang666/alertmanager/model"
-	"github.com/qinquanliuxiang666/alertmanager/pkg/alert"
 )
 
 var feishuStruct = &FeiShu{
@@ -46,17 +45,16 @@ type Feishuer interface {
 	GetCli(alertChannelName string) (*lark.Client, error)
 	UpdateCli(alertChannelName, appid, appSecret string)
 	CloseCli(alertChannelName string)
-	FeishuCarder
+	Notifyer
 }
 
-type FeishuCarder interface {
-	SendCard(ctx context.Context, alertChannel *model.AlertChannel, req *types.AlertReceiveReq) error
+type Notifyer interface {
+	Notify(ctx context.Context, notifyReq *types.NotifyReq) (result *types.NotifySendResult, err error)
 }
 
 type FeiShu struct {
-	lock        sync.Mutex
-	clients     map[string]*Client
-	AlertUtiler alert.AlertUtiler
+	lock    sync.Mutex
+	clients map[string]*Client
 }
 
 type Client struct {
@@ -65,8 +63,7 @@ type Client struct {
 	cancelFn context.CancelFunc
 }
 
-func NewFeiShu(alertUtiler alert.AlertUtiler) Feishuer {
-	feishuStruct.AlertUtiler = alertUtiler
+func NewFeiShu() Feishuer {
 	return feishuStruct
 }
 
@@ -226,93 +223,6 @@ func (receiver *FeiShu) CloseCli(alertChannelName string) {
 	zap.S().Infof("从本地缓存中删除 [%s] 的客户端成功, 当前已缓存的客户端 %s", alertChannelName, clientNames)
 }
 
-func (receiver *FeiShu) SendCard(ctx context.Context, alertChannel *model.AlertChannel, req *types.AlertReceiveReq) error {
-	if alertChannel.AlertTemplate == nil {
-		return fmt.Errorf("%s alertChannel 未绑定模板, 发送告警失败", alertChannel.Name)
-	}
-	feishuAppConf, err := alertChannel.GetFeishuAppConfig()
-	if err != nil {
-		return fmt.Errorf("获取飞书配置失败: %w", err)
-	}
-
-	larkCli, err := receiver.GetCli(req.ChannelName)
-	if err != nil {
-		return err
-	}
-
-	if *alertChannel.AggregationStatus == model.AggregationEnabled {
-		sendAlerts, err := receiver.handleAggregation(ctx, larkCli, feishuAppConf, alertChannel, req)
-		if err != nil {
-			return err
-		}
-		receiver.AlertUtiler.SaveAggregationAlert(ctx, alertChannel, sendAlerts)
-	} else {
-		normalSendResult, err := receiver.handleNormal(ctx, larkCli, feishuAppConf, alertChannel, req)
-		if err != nil {
-			return err
-		}
-		receiver.AlertUtiler.SaveNormalAlerts(ctx, alertChannel, normalSendResult)
-	}
-	return nil
-}
-
-func (receiver *FeiShu) handleAggregation(ctx context.Context, larkCli *lark.Client, conf *model.FeishuAppConfig, alertChannel *model.AlertChannel, req *types.AlertReceiveReq) (*types.HandleAggregationSendResult, error) {
-	firingAlerts, resolvedAlerts := receiver.AlertUtiler.AlertGroup(ctx, req.Alerts)
-	var firingErr, resolvedErr error
-	// 处理告警中 (Firing)
-	if len(firingAlerts) > 0 {
-		newReq := req.DeepCopy()
-		newReq.Alerts = firingAlerts
-		if firingErr = receiver.renderAndSend(ctx, larkCli, conf, newReq, alertChannel.AlertTemplate.AggregationTemplate, "red"); firingErr != nil {
-			log.WithRequestID(ctx).Error("聚合发送告警卡片失败", zap.Error(firingErr))
-		}
-	}
-
-	// 处理已恢复 (Resolved)
-	if len(resolvedAlerts) > 0 {
-		newReq := req.DeepCopy()
-		newReq.Alerts = resolvedAlerts
-		if resolvedErr = receiver.renderAndSend(ctx, larkCli, conf, newReq, alertChannel.AlertTemplate.AggregationTemplate, "green"); resolvedErr != nil {
-			log.WithRequestID(ctx).Error("聚合发送恢复卡片失败", zap.Error(resolvedErr))
-		}
-	}
-
-	return &types.HandleAggregationSendResult{
-		FiringErr:      firingErr,
-		ResolvedErr:    resolvedErr,
-		FiringAlerts:   firingAlerts,
-		ResolvedAlerts: resolvedAlerts,
-	}, errors.Join(firingErr, resolvedErr)
-}
-
-func (receiver *FeiShu) handleNormal(ctx context.Context, larkCli *lark.Client, conf *model.FeishuAppConfig, alertChannel *model.AlertChannel, req *types.AlertReceiveReq) ([]*types.NormalSendResult, error) {
-	var errs []error
-	var results []*types.NormalSendResult
-	for _, v := range req.Alerts {
-		color := "red"
-		if v.Status == constant.AlertStatusResolved {
-			color = "green"
-		}
-
-		err := receiver.renderAndSend(ctx, larkCli, conf, v, alertChannel.AlertTemplate.Template, color)
-
-		// 记录结果，用于后续落库
-		results = append(results, &types.NormalSendResult{
-			Alert:   v,
-			SendErr: err,
-		})
-
-		if err != nil {
-			log.WithRequestID(ctx).Error("发送单条飞书卡片失败", zap.Error(err))
-			if len(errs) < 4 {
-				errs = append(errs, err)
-			}
-			continue
-		}
-	}
-	return results, errors.Join(errs...)
-}
-
 func (receiver *FeiShu) renderAndSend(ctx context.Context, larkCli *lark.Client, conf *model.FeishuAppConfig, data interface{}, tpl string, color string) error {
 	// 1. 渲染模板
 	content, err := RenderingAlertContent().Build(data, tpl)
@@ -426,4 +336,90 @@ func (receiver *FeishuCardDataContent) Build(alert any, alertTpl string) (*FeiSh
 		Type: "template",
 		Data: *receiver,
 	}, nil
+}
+
+func (receiver *FeiShu) Notify(ctx context.Context, notifyReq *types.NotifyReq) (result *types.NotifySendResult, err error) {
+	alertChannel := notifyReq.AlertChannel
+	feishuAppConf, err := alertChannel.GetFeishuAppConfig()
+	if err != nil {
+		return nil, fmt.Errorf("获取飞书配置失败: %w", err)
+	}
+
+	var firingErr, resolvedErr error
+	larkCli, err := receiver.GetCli(alertChannel.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	// 聚合发送告警
+	if *notifyReq.AlertChannel.AggregationStatus == model.AggregationEnabled {
+		if len(notifyReq.NotifyAlerts.FiringAlerts) > 0 {
+			newReq := notifyReq.AlertReceiveReq.DeepCopy()
+			newReq.Alerts = notifyReq.NotifyAlerts.FiringAlerts
+			firingErr = receiver.renderAndSend(ctx, larkCli, feishuAppConf, newReq, alertChannel.AlertTemplate.AggregationTemplate, "red")
+			if firingErr != nil {
+				log.WithRequestID(ctx).Error("聚合发送告警卡片失败", zap.Error(firingErr))
+			}
+		}
+
+		if len(notifyReq.NotifyAlerts.ResolvedAlerts) > 0 {
+			newReq := notifyReq.AlertReceiveReq.DeepCopy()
+			newReq.Alerts = notifyReq.NotifyAlerts.ResolvedAlerts
+			if resolvedErr = receiver.renderAndSend(ctx, larkCli, feishuAppConf, newReq, alertChannel.AlertTemplate.AggregationTemplate, "green"); resolvedErr != nil {
+				log.WithRequestID(ctx).Error("聚合发送恢复卡片失败", zap.Error(resolvedErr))
+			}
+		}
+
+		return &types.NotifySendResult{
+			AggregationSendResult: &types.AggregationSendResult{
+				FiringErr:   firingErr,
+				ResolvedErr: resolvedErr,
+			},
+			SingleSendResult: nil,
+		}, nil
+	}
+
+	if *notifyReq.AlertChannel.AggregationStatus == model.AggregationDisabled {
+		// 非聚合发送
+		normalSendResult, err := receiver.singleSend(ctx, larkCli, feishuAppConf, alertChannel, notifyReq.NotifyAlerts)
+		if err != nil {
+			return nil, err
+		}
+		return &types.NotifySendResult{
+			AggregationSendResult: nil,
+			SingleSendResult:      normalSendResult,
+		}, nil
+	}
+
+	return nil, fmt.Errorf("不支持的发送模式, 只支持聚合发送和非聚合发送")
+}
+
+func (receiver *FeiShu) singleSend(ctx context.Context, larkCli *lark.Client, conf *model.FeishuAppConfig, alertChannel *model.AlertChannel, notifyAlerts *types.NotifyAlerts) ([]*types.SingleSendResult, error) {
+	var errs []error
+	var results []*types.SingleSendResult
+	totalLen := len(notifyAlerts.FiringAlerts) + len(notifyAlerts.ResolvedAlerts)
+	alerts := make([]*types.Alert, 0, totalLen)
+	alerts = append(alerts, notifyAlerts.FiringAlerts...)
+	alerts = append(alerts, notifyAlerts.ResolvedAlerts...)
+	for _, v := range alerts {
+		color := "red"
+		if v.Status == constant.AlertStatusResolved {
+			color = "green"
+		}
+		err := receiver.renderAndSend(ctx, larkCli, conf, v, alertChannel.AlertTemplate.Template, color)
+		// 记录结果，用于后续落库
+		results = append(results, &types.SingleSendResult{
+			Alert:   v,
+			SendErr: err,
+		})
+
+		if err != nil {
+			log.WithRequestID(ctx).Error("发送单条飞书卡片失败", zap.Error(err))
+			if len(errs) < 4 {
+				errs = append(errs, err)
+			}
+			continue
+		}
+	}
+	return results, errors.Join(errs...)
 }

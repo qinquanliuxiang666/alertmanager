@@ -9,4 +9,5 @@ var ControllerProviderSet = wire.NewSet(
 	NewAlertManagerController,
 	NewAlertTemplateController,
 	NewAlertChannelController,
+	NewAlertHistoryController,
 )

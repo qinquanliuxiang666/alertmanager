@@ -2,7 +2,6 @@ package pkg
 
 import (
 	"github.com/google/wire"
-	"github.com/qinquanliuxiang666/alertmanager/pkg/alert"
 	"github.com/qinquanliuxiang666/alertmanager/pkg/casbin"
 	"github.com/qinquanliuxiang666/alertmanager/pkg/feishu"
 	"github.com/qinquanliuxiang666/alertmanager/pkg/jwt"
@@ -13,7 +12,6 @@ import (
 var PkgProviderSet = wire.NewSet(
 	wire.Bind(new(jwt.JwtInterface), new(*jwt.GenerateToken)),
 	jwt.NewGenerateToken,
-	alert.NewAlertUtiler,
 	feishu.NewFeiShu,
 	casbin.NewEnforcer,
 	casbin.NewCasbinManager,
