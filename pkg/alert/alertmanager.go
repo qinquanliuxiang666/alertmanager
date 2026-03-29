@@ -19,7 +19,7 @@ import (
 
 type AlertUtiler interface {
 	AlertGroup(ctx context.Context, alerts []*types.Alert) (firingAlerts, resolvedAlerts []*types.Alert)
-	SaveAggregationAlert(ctx context.Context, alertChannel *model.AlertChannel, req *types.HandleAggregationSendResult) error
+	SaveAggregationAlert(ctx context.Context, alertChannel *model.AlertChannel, req *types.HandleAggregationSendResult)
 	SaveNormalAlerts(ctx context.Context, alertChannel *model.AlertChannel, results []*types.NormalSendResult)
 }
 
@@ -64,7 +64,16 @@ func (receiver *AlertUtil) getSilence(ctx context.Context, alert *types.Alert) (
 	return silence, nil
 }
 
-func (receiver *AlertUtil) SaveAggregationAlert(ctx context.Context, alertChannel *model.AlertChannel, req *types.HandleAggregationSendResult) error {
+func (receiver *AlertUtil) SaveAggregationAlert(ctx context.Context, alertChannel *model.AlertChannel, req *types.HandleAggregationSendResult) {
+	// d, _ := json.Marshal(alertChannel)
+	// dd, _ := json.Marshal(req)
+	// fmt.Println("☀️------------------------------------☀️")
+	// fmt.Println(string(d))
+	// fmt.Println("🌙------------------------------------🌙")
+	// fmt.Println("☀️------------------------------------☀️")
+	// fmt.Println(string(dd))
+	// fmt.Println("🌙------------------------------------🌙")
+
 	// 1. 处理 Firing 告警
 	if len(req.FiringAlerts) > 0 {
 		// 将未恢复告警结束时间设置为 nil
@@ -73,18 +82,17 @@ func (receiver *AlertUtil) SaveAggregationAlert(ctx context.Context, alertChanne
 		}
 
 		if err := receiver.processAlertGroup(ctx, alertChannel, req.FiringAlerts, req.FiringErr); err != nil {
-			return fmt.Errorf("处理 Firing 告警落库失败: %w", err)
+			log.WithRequestID(ctx).Error("处理 Firing 告警落库失败", zap.Error(err))
 		}
 	}
 
 	// 2. 处理 Resolved 告警
 	if len(req.ResolvedAlerts) > 0 {
 		if err := receiver.processAlertGroup(ctx, alertChannel, req.ResolvedAlerts, req.ResolvedErr); err != nil {
-			return fmt.Errorf("处理 Resolved 告警落库失败: %w", err)
+			log.WithRequestID(ctx).Error("处理 Resolved 告警落库失败", zap.Error(err))
 		}
 	}
 
-	return nil
 }
 
 // processAlertGroup 提取出的公用处理逻辑
@@ -127,7 +135,7 @@ func (receiver *AlertUtil) processAlertGroup(ctx context.Context, alertChannel *
 				}
 			}()
 
-			timeoutCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			timeoutCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
 			// --- 优化点 1: 构造批量查询条件 ---
@@ -142,7 +150,7 @@ func (receiver *AlertUtil) processAlertGroup(ctx context.Context, alertChannel *
 
 			// --- 优化点 2: 一次性捞出所有匹配的记录 ---
 			var existingHistories []*model.AlertHistory
-			err := alerthistoryStore.WithContext(timeoutCtx).
+			err = alerthistoryStore.WithContext(timeoutCtx).
 				UnderlyingDB(). // 切换到原生 gorm 以支持元组查询
 				Where("(fingerprint, starts_at) IN ?", queryArgs).
 				Find(&existingHistories).Error
@@ -159,10 +167,27 @@ func (receiver *AlertUtil) processAlertGroup(ctx context.Context, alertChannel *
 			// --- 优化点 3: 内存匹配 ---
 			// 将查出的结果转成 map 方便快速比对
 			historyMap := make(map[string]*model.AlertHistory)
-			for _, h := range existingHistories {
+			// 全部没有恢复的告警
+			noResolveDMap := receiver.disableBefoceAlertHistory(timeoutCtx, firstAlert.Labels["cluster"])
+			// 本次告警包含的未恢复的告警
+			exitsHistoryMap := make(map[string][]*model.AlertHistory, len(noResolveDMap))
+			endTime := time.Now().Local().Truncate(time.Millisecond)
+			for exisIndex := range existingHistories {
+				currAlert := existingHistories[exisIndex]
+				oldAlertHistorys, ok := noResolveDMap[currAlert.Fingerprint]
+				if ok {
+					for i := range oldAlertHistorys {
+						// 相同集群、相同告警指纹，如果存在为结束的告警，但是现在又触发了一个，那么便将早的告警结束掉
+						if oldAlertHistorys[i].StartsAt.Before(currAlert.StartsAt) {
+							oldAlertHistorys[i].Status = constant.AlertStatusResolved
+							oldAlertHistorys[i].EndsAt = &endTime
+							exitsHistoryMap[currAlert.Fingerprint] = append(exitsHistoryMap[currAlert.Fingerprint], oldAlertHistorys[i])
+						}
+					}
+				}
 				// key 使用指纹 + 时间戳(纳秒)
-				key := fmt.Sprintf("%s-%d", h.Fingerprint, h.StartsAt.UnixNano())
-				historyMap[key] = h
+				key := fmt.Sprintf("%s-%d", currAlert.Fingerprint, currAlert.StartsAt.UnixNano())
+				historyMap[key] = currAlert
 			}
 
 			objs := make([]*model.AlertHistory, 0)
@@ -182,6 +207,16 @@ func (receiver *AlertUtil) processAlertGroup(ctx context.Context, alertChannel *
 			if len(objs) > 0 {
 				if err := alerthistoryStore.WithContext(timeoutCtx).Save(objs...); err != nil {
 					log.WithRequestID(reqIDCtx).Error("异步批量更新 alerthistory 失败", zap.Error(err))
+				}
+			}
+
+			if len(exitsHistoryMap) > 0 {
+				exitsHistorySline := make([]*model.AlertHistory, 0, len(exitsHistoryMap)*2)
+				for i := range exitsHistoryMap {
+					exitsHistorySline = append(exitsHistorySline, exitsHistoryMap[i]...)
+				}
+				if err := alerthistoryStore.WithContext(timeoutCtx).Save(exitsHistorySline...); err != nil {
+					log.WithRequestID(reqIDCtx).Error("异步批量更新过期告警 alerthistory.status 失败", zap.Error(err))
 				}
 			}
 		}(ctx, alerts)
@@ -267,4 +302,21 @@ func (receiver *AlertUtil) SaveNormalAlerts(ctx context.Context, alertChannel *m
 			}
 		}
 	}()
+}
+
+func (receiver *AlertUtil) disableBefoceAlertHistory(ctx context.Context, cluster string) map[string][]*model.AlertHistory {
+	al := store.AlertHistory.WithContext(ctx)
+
+	alertHistorys, err := al.Where(store.AlertHistory.Cluster.Eq(cluster)).Where(store.AlertHistory.EndsAt.IsNull()).Find()
+	if err != nil {
+		zap.L().Error("查询旧的 alertHistory 失败", zap.Error(err))
+		return nil
+	}
+	alertHistoryMap := make(map[string][]*model.AlertHistory, len(alertHistorys))
+	for i := range alertHistorys {
+		fp := alertHistorys[i].Fingerprint
+		alertHistoryMap[fp] = append(alertHistoryMap[fp], alertHistorys[i])
+	}
+
+	return alertHistoryMap
 }

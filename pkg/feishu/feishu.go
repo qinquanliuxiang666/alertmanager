@@ -245,16 +245,14 @@ func (receiver *FeiShu) SendCard(ctx context.Context, alertChannel *model.AlertC
 		if err != nil {
 			return err
 		}
-		if err = receiver.AlertUtiler.SaveAggregationAlert(ctx, alertChannel, sendAlerts); err != nil {
-			log.WithRequestID(ctx).Error("告警记录落库失败", zap.Error(err))
+		receiver.AlertUtiler.SaveAggregationAlert(ctx, alertChannel, sendAlerts)
+	} else {
+		normalSendResult, err := receiver.handleNormal(ctx, larkCli, feishuAppConf, alertChannel, req)
+		if err != nil {
+			return err
 		}
-		return nil
+		receiver.AlertUtiler.SaveNormalAlerts(ctx, alertChannel, normalSendResult)
 	}
-	normalSendResult, err := receiver.handleNormal(ctx, larkCli, feishuAppConf, alertChannel, req)
-	if err != nil {
-		return err
-	}
-	receiver.AlertUtiler.SaveNormalAlerts(ctx, alertChannel, normalSendResult)
 	return nil
 }
 
@@ -319,7 +317,7 @@ func (receiver *FeiShu) renderAndSend(ctx context.Context, larkCli *lark.Client,
 	// 1. 渲染模板
 	content, err := RenderingAlertContent().Build(data, tpl)
 	if err != nil {
-		return fmt.Errorf("渲染模板失败: %w", err)
+		return err
 	}
 
 	// 2. 设置标题颜色 (如果模板里没写死的话)
