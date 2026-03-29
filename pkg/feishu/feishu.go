@@ -245,7 +245,10 @@ func (receiver *FeiShu) SendCard(ctx context.Context, alertChannel *model.AlertC
 		if err != nil {
 			return err
 		}
-		return receiver.AlertUtiler.SaveAggregationAlert(ctx, alertChannel, sendAlerts)
+		if err = receiver.AlertUtiler.SaveAggregationAlert(ctx, alertChannel, sendAlerts); err != nil {
+			log.WithRequestID(ctx).Error("告警记录落库失败", zap.Error(err))
+		}
+		return nil
 	}
 	normalSendResult, err := receiver.handleNormal(ctx, larkCli, feishuAppConf, alertChannel, req)
 	if err != nil {
@@ -397,6 +400,13 @@ var funcMap = template.FuncMap{
 	},
 	"add": func(a, b int) int {
 		return a + b
+	},
+	"getEndTime": func(endTime *time.Time, msg string) string {
+		if endTime == nil || endTime.IsZero() {
+			return msg
+		}
+		var cstZone = time.FixedZone("CST", 8*3600)
+		return endTime.In(cstZone).Format("2006-01-02 15:04:05")
 	},
 }
 
