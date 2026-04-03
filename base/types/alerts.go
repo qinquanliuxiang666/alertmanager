@@ -78,9 +78,29 @@ func (receiver *AlertReceiveReq) DeepCopy() *AlertReceiveReq {
 
 // NotifyReq 是内部服务处理告警发送的请求结构，包含了告警发送通道信息、告警详情和原始接收请求
 type NotifyReq struct {
-	AlertChannel    *model.AlertChannel
-	NotifyAlerts    *NotifyAlerts
-	AlertReceiveReq *AlertReceiveReq
+	AlertChannel     *model.AlertChannel
+	AlertReceiveReq  *AlertReceiveReq
+	TenantValue      string
+	AlertMap         *AlertMap
+	ExistingAlertMap map[string]*model.AlertHistory
+	AlertArry        *AlertArry
+}
+
+func NewNotifyReq() *NotifyReq {
+	return &NotifyReq{
+		AlertArry: &AlertArry{},
+		AlertMap:  &AlertMap{},
+	}
+}
+
+type AlertArry struct {
+	FiringAlertArry   []*Alert
+	ResolvedAlertArry []*Alert
+}
+
+type AlertMap struct {
+	FiringAlertMap   map[string]*Alert
+	ResolvedAlertMap map[string]*Alert
 }
 
 // NotifyAlerts 代表一次告警发送中所有的告警详情，分为正在触发的告警和已恢复的告警两类

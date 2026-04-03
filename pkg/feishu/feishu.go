@@ -339,8 +339,12 @@ func (receiver *FeishuCardDataContent) Build(alert any, alertTpl string) (*FeiSh
 }
 
 func (receiver *FeiShu) Notify(ctx context.Context, notifyReq *types.NotifyReq) (result *types.NotifySendResult, err error) {
-	alertChannel := notifyReq.AlertChannel
-	feishuAppConf, err := alertChannel.GetFeishuAppConfig()
+	var (
+		feishuAppConf *model.FeishuAppConfig
+		alertChannel  = notifyReq.AlertChannel
+	)
+
+	feishuAppConf, err = alertChannel.GetFeishuAppConfig()
 	if err != nil {
 		return nil, fmt.Errorf("获取飞书配置失败: %w", err)
 	}
@@ -351,20 +355,21 @@ func (receiver *FeiShu) Notify(ctx context.Context, notifyReq *types.NotifyReq) 
 		return nil, err
 	}
 
+	alertArry := notifyReq.AlertArry
 	// 聚合发送告警
 	if *notifyReq.AlertChannel.AggregationStatus == model.AggregationEnabled {
-		if len(notifyReq.NotifyAlerts.FiringAlerts) > 0 {
+		if len(alertArry.FiringAlertArry) > 0 {
 			newReq := notifyReq.AlertReceiveReq.DeepCopy()
-			newReq.Alerts = notifyReq.NotifyAlerts.FiringAlerts
+			newReq.Alerts = alertArry.FiringAlertArry
 			firingErr = receiver.renderAndSend(ctx, larkCli, feishuAppConf, newReq, alertChannel.AlertTemplate.AggregationTemplate, "red")
 			if firingErr != nil {
 				log.WithRequestID(ctx).Error("聚合发送告警卡片失败", zap.Error(firingErr))
 			}
 		}
 
-		if len(notifyReq.NotifyAlerts.ResolvedAlerts) > 0 {
+		if len(alertArry.ResolvedAlertArry) > 0 {
 			newReq := notifyReq.AlertReceiveReq.DeepCopy()
-			newReq.Alerts = notifyReq.NotifyAlerts.ResolvedAlerts
+			newReq.Alerts = alertArry.ResolvedAlertArry
 			if resolvedErr = receiver.renderAndSend(ctx, larkCli, feishuAppConf, newReq, alertChannel.AlertTemplate.AggregationTemplate, "green"); resolvedErr != nil {
 				log.WithRequestID(ctx).Error("聚合发送恢复卡片失败", zap.Error(resolvedErr))
 			}
@@ -381,7 +386,8 @@ func (receiver *FeiShu) Notify(ctx context.Context, notifyReq *types.NotifyReq) 
 
 	if *notifyReq.AlertChannel.AggregationStatus == model.AggregationDisabled {
 		// 非聚合发送
-		normalSendResult, err := receiver.singleSend(ctx, larkCli, feishuAppConf, alertChannel, notifyReq.NotifyAlerts)
+		normalSendResult, err := receiver.
+			singleSend(ctx, larkCli, feishuAppConf, alertChannel, alertArry)
 		if err != nil {
 			return nil, err
 		}
@@ -394,20 +400,17 @@ func (receiver *FeiShu) Notify(ctx context.Context, notifyReq *types.NotifyReq) 
 	return nil, fmt.Errorf("不支持的发送模式, 只支持聚合发送和非聚合发送")
 }
 
-func (receiver *FeiShu) singleSend(ctx context.Context, larkCli *lark.Client, conf *model.FeishuAppConfig, alertChannel *model.AlertChannel, notifyAlerts *types.NotifyAlerts) ([]*types.SingleSendResult, error) {
+func (receiver *FeiShu) singleSend(ctx context.Context, larkCli *lark.Client, conf *model.FeishuAppConfig, alertChannel *model.AlertChannel, alertArry *types.AlertArry) ([]*types.SingleSendResult, error) {
 	var errs []error
 	var results []*types.SingleSendResult
-	totalLen := len(notifyAlerts.FiringAlerts) + len(notifyAlerts.ResolvedAlerts)
-	alerts := make([]*types.Alert, 0, totalLen)
-	alerts = append(alerts, notifyAlerts.FiringAlerts...)
-	alerts = append(alerts, notifyAlerts.ResolvedAlerts...)
-	for _, v := range alerts {
+
+	process := func(v *types.Alert) {
 		color := "red"
 		if v.Status == constant.AlertStatusResolved {
 			color = "green"
 		}
 		err := receiver.renderAndSend(ctx, larkCli, conf, v, alertChannel.AlertTemplate.Template, color)
-		// 记录结果，用于后续落库
+
 		results = append(results, &types.SingleSendResult{
 			Alert:   v,
 			SendErr: err,
@@ -415,11 +418,18 @@ func (receiver *FeiShu) singleSend(ctx context.Context, larkCli *lark.Client, co
 
 		if err != nil {
 			log.WithRequestID(ctx).Error("发送单条飞书卡片失败", zap.Error(err))
-			if len(errs) < 4 {
+			if len(errs) < 4 { // 限制错误收集数量
 				errs = append(errs, err)
 			}
-			continue
 		}
 	}
+
+	for _, v := range alertArry.FiringAlertArry {
+		process(v)
+	}
+	for _, v := range alertArry.ResolvedAlertArry {
+		process(v)
+	}
+
 	return results, errors.Join(errs...)
 }

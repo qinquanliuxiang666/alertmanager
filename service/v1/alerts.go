@@ -38,6 +38,7 @@ func NewAlertsServicer(cache store.CacheStorer, feishuImpl feishu.Feishuer) Aler
 }
 
 func (receiver *alertsService) SendAlert(ctx context.Context, req *types.AlertReceiveReq) error {
+	log.WithRequestID(ctx).Info("接收告警数据", zap.Any("data", req))
 	// 获取告警发送Channel
 	alertChannel, err := receiver.getChannel(ctx, req.ChannelName)
 	if err != nil {
@@ -49,18 +50,17 @@ func (receiver *alertsService) SendAlert(ctx context.Context, req *types.AlertRe
 		return fmt.Errorf("%s alertChannel 未绑定模板, 发送告警失败", alertChannel.Name)
 	}
 
-	var firingAlerts, resolvedAlerts []*types.Alert
-	firingAlerts, resolvedAlerts = receiver.aggregatedAlarmGrouping(ctx, req.Alerts)
-	notifyReq := &types.NotifyReq{
-		AlertChannel: alertChannel,
-		NotifyAlerts: &types.NotifyAlerts{
-			FiringAlerts:   firingAlerts,
-			ResolvedAlerts: resolvedAlerts,
-		},
-		AlertReceiveReq: req,
+	tenantValue := req.Alerts[0].Labels[receiver.tenantKey]
+	notifyReq, err := receiver.aggregatedAlarmGrouping(ctx, tenantValue, req.Alerts)
+	if err != nil {
+		log.WithRequestID(ctx).Error("告警分组失败", zap.Error(err))
+		return err
 	}
+	notifyReq.TenantValue = tenantValue
+	notifyReq.AlertChannel = alertChannel
+	notifyReq.AlertReceiveReq = req
 
-	log.WithRequestID(ctx).Info("告警分组完成, 开始发送告警", zap.Int("firingAlerts", len(firingAlerts)), zap.Int("resolvedAlerts", len(resolvedAlerts)))
+	log.WithRequestID(ctx).Info("通过告警通道发送告警", zap.String("channelName", alertChannel.Name))
 	var sendResult *types.NotifySendResult
 	switch alertChannel.Type {
 	case model.ChannelTypeFeishuApp:
@@ -72,6 +72,7 @@ func (receiver *alertsService) SendAlert(ctx context.Context, req *types.AlertRe
 		return fmt.Errorf("不支持的发送类型")
 	}
 
+	log.WithRequestID(ctx).Info("持久化告警数据", zap.String("channelName", alertChannel.Name))
 	if sendResult != nil {
 		asyncCtx := context.WithoutCancel(ctx)
 		go receiver.saveAlerts(asyncCtx, notifyReq, sendResult)
@@ -120,14 +121,47 @@ func (receiver *alertsService) getChannel(ctx context.Context, channelName strin
 
 // aggregatedAlarmGrouping 聚合告警分组
 // 如果通知为聚合告警时, 需要将告警分配 firing 和 resolved 两组, 分别发送
-func (receiver *alertsService) aggregatedAlarmGrouping(ctx context.Context, alerts []*types.Alert) (firingAlerts, resolvedAlerts []*types.Alert) {
-	if len(alerts) == 0 {
-		return
+func (receiver *alertsService) aggregatedAlarmGrouping(ctx context.Context, tenantValue string, alerts []*types.Alert) (*types.NotifyReq, error) {
+	alertLen := len(alerts)
+	if alertLen == 0 {
+		return nil, fmt.Errorf("alerts 为空, 告警分组失败")
+	}
+	var (
+		tenantWhere       = fmt.Sprintf("%s = ?", receiver.dbTenantKey)
+		notifyReq         = types.NewNotifyReq()
+		existingHistories []*model.AlertHistory
+		existingHistorMap = make(map[string]*model.AlertHistory)
+		queryArgs         [][]interface{}
+		resolvedAlertMap  = make(map[string]*types.Alert, alertLen)
+		firingAlertMap    = make(map[string]*types.Alert, alertLen)
+		firingAlertArry   = make([]*types.Alert, 0, alertLen)
+		resolvedAlertArry = make([]*types.Alert, 0, alertLen)
+	)
+
+	for i := range alerts {
+		queryArgs = append(queryArgs, []interface{}{
+			alerts[i].Fingerprint,
+			alerts[i].StartsAt.Truncate(time.Millisecond),
+		})
 	}
 
-	firingAlerts = make([]*types.Alert, 0)
-	resolvedAlerts = make([]*types.Alert, 0)
+	err := al.WithContext(ctx).
+		UnderlyingDB().
+		Preload("AlertSendRecord").
+		Where(tenantWhere, tenantValue).
+		Where("(fingerprint, starts_at) IN ?", queryArgs).
+		Find(&existingHistories).Error
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range existingHistories {
+		key := helper.GetAlertMapKey(existingHistories[i].Fingerprint, existingHistories[i].StartsAt)
+		existingHistorMap[key] = existingHistories[i]
+	}
+
 	for i := range alerts {
+		key := helper.GetAlertMapKey(alerts[i].Fingerprint, alerts[i].StartsAt)
 		if alerts[i].Status == constant.AlertStatusFiring {
 			// 告警逻辑
 			// TODO 判断告警静默,如果静默continue
@@ -142,14 +176,28 @@ func (receiver *alertsService) aggregatedAlarmGrouping(ctx context.Context, aler
 			}
 			// 如果是 Firing 那么将 EndsAt 设置为 nil
 			alerts[i].EndsAt = nil
-			firingAlerts = append(firingAlerts, alerts[i])
+			firingAlertMap[key] = alerts[i]
+			firingAlertArry = append(firingAlertArry, alerts[i])
 		}
 
 		if alerts[i].Status == constant.AlertStatusResolved {
-			resolvedAlerts = append(resolvedAlerts, alerts[i])
+			if existingHistor, ok := existingHistorMap[key]; ok {
+				if existingHistor.Status == constant.AlertStatusResolved {
+					delete(existingHistorMap, key)
+				}
+			} else {
+				resolvedAlertArry = append(resolvedAlertArry, alerts[i])
+				resolvedAlertMap[key] = alerts[i]
+			}
 		}
 	}
-	return
+	notifyReq.ExistingAlertMap = existingHistorMap
+	notifyReq.AlertArry.FiringAlertArry = firingAlertArry
+	notifyReq.AlertArry.ResolvedAlertArry = resolvedAlertArry
+	notifyReq.AlertMap.FiringAlertMap = firingAlertMap
+	notifyReq.AlertMap.ResolvedAlertMap = resolvedAlertMap
+
+	return notifyReq, nil
 }
 
 // TODO getSilence
@@ -171,53 +219,10 @@ func (receiver *alertsService) saveAlerts(ctx context.Context, notifyReq *types.
 
 	log.WithRequestID(ctx).Info("告警数据开始持久化")
 
-	var (
-		alerts = notifyReq.AlertReceiveReq.Alerts
-		// 数据库查询条件, 查询本次告警的所有数据
-		queryArgs [][]interface{}
-	)
-
-	// 告警数据里 tenantKey 对应的值, 用于后续查询数据库时区分租户, 这里默认取第一条告警数据的 tenantKey 值作为本次查询的值, 因为同一批次的告警数据应该是同一个租户的
-	var tenantValue string
-	for i, a := range alerts {
-		if i == 0 {
-			tenantValue = a.Labels[receiver.tenantKey]
-		}
-		queryArgs = append(queryArgs, []interface{}{
-			a.Fingerprint,
-			a.StartsAt.Truncate(time.Millisecond),
-		})
-	}
-
 	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	// TODO 租户逻辑
-	var existingHistories []*model.AlertHistory
-	tenantWhere := fmt.Sprintf("%s = ?", receiver.dbTenantKey)
-	err := al.WithContext(timeoutCtx).
-		UnderlyingDB().
-		Preload("AlertSendRecord").
-		Where(tenantWhere, tenantValue).
-		Where("(fingerprint, starts_at) IN ?", queryArgs).
-		Find(&existingHistories).Error
-	if err != nil {
-		log.WithRequestID(ctx).Error("批量查询告警历史失败, 协程退出", zap.Error(err))
-		return
-	}
-	log.WithRequestID(ctx).Debug("查询告警数据成功, 开始处理数据")
-
-	// 将查出的结果转成 map 方便快速比对
-	storeHistoryMap := make(map[string]*model.AlertHistory)
-	for exisIndex := range existingHistories {
-		currAlert := existingHistories[exisIndex]
-		// key 使用指纹 + 时间戳(纳秒)
-		key := helper.GetAlertMapKey(currAlert.Fingerprint, currAlert.StartsAt)
-		storeHistoryMap[key] = currAlert
-	}
-
-	firingAlertsMap, resolvedAlertsMap := receiver.getAlertsMap(notifyReq.NotifyAlerts)
-
+	// firingAlertsMap, resolvedAlertsMap := receiver.getAlertsMap(notifyReq.NotifyAlerts)
 	var (
 		allCreateSendRecords []*model.AlertSendRecord
 		allUpdateSendRecords []*model.AlertSendRecord
@@ -227,7 +232,7 @@ func (receiver *alertsService) saveAlerts(ctx context.Context, notifyReq *types.
 	log.WithRequestID(ctx).Debug("告警记录处理完成, 开始批量持久化")
 
 	var sharedAggRecord []*model.AlertSendRecord
-	batches := []map[string]*types.Alert{firingAlertsMap, resolvedAlertsMap}
+	batches := []map[string]*types.Alert{notifyReq.AlertMap.FiringAlertMap, notifyReq.AlertMap.ResolvedAlertMap}
 	for _, batchMap := range batches {
 		if len(batchMap) == 0 {
 			continue
@@ -237,7 +242,7 @@ func (receiver *alertsService) saveAlerts(ctx context.Context, notifyReq *types.
 			notifyReq:       notifyReq,
 			sendResult:      sendResult,
 			batchMap:        batchMap,
-			storeHistoryMap: storeHistoryMap,
+			storeHistoryMap: notifyReq.ExistingAlertMap,
 		})
 
 		// 合并结果
@@ -281,25 +286,6 @@ func (receiver *alertsService) saveAlerts(ctx context.Context, notifyReq *types.
 			}
 		}
 	}
-}
-
-func (receiver *alertsService) getAlertsMap(notifyAlerts *types.NotifyAlerts) (firingAlertsMap, resolvedAlertsMap map[string]*types.Alert) {
-	f := notifyAlerts.FiringAlerts
-	r := notifyAlerts.ResolvedAlerts
-	firingAlertsMap = make(map[string]*types.Alert, len(f))
-	resolvedAlertsMap = make(map[string]*types.Alert, len(r))
-
-	for i := range f {
-		key := helper.GetAlertMapKey(f[i].Fingerprint, f[i].StartsAt)
-		firingAlertsMap[key] = notifyAlerts.FiringAlerts[i]
-	}
-
-	for i := range r {
-		key := helper.GetAlertMapKey(r[i].Fingerprint, r[i].StartsAt)
-		resolvedAlertsMap[key] = r[i]
-	}
-
-	return firingAlertsMap, resolvedAlertsMap
 }
 
 type processAlertsReq struct {
