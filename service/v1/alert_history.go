@@ -25,14 +25,14 @@ func NewHistoryServicer(cache store.CacheStorer) AlertHistoryServicer {
 }
 
 func (recevicer *alertHistoryService) QueryHistory(ctx context.Context, req *types.IDRequest) (*model.AlertHistory, error) {
-	return al.WithContext(ctx).Where(al.ID.Eq(int(req.ID))).First()
+	return aHistory.WithContext(ctx).Where(aHistory.ID.Eq(int(req.ID))).First()
 }
 
 func (recevicer *alertHistoryService) ListHistory(ctx context.Context, req *types.AlertHistoryListRequest) (*types.AlertHistoryListResponse, error) {
 	var (
 		alertAlertHistorys []*model.AlertHistory
 		total              int64
-		query              = al.WithContext(ctx)
+		query              = aHistory.WithContext(ctx)
 		err                error
 	)
 	query = recevicer.buildHistoryFilter(query, req)
@@ -42,7 +42,7 @@ func (recevicer *alertHistoryService) ListHistory(ctx context.Context, req *type
 	}
 
 	if req.Sort != "" && req.Direction != "" {
-		sort, ok := al.GetFieldByName(req.Sort)
+		sort, ok := aHistory.GetFieldByName(req.Sort)
 		if !ok {
 			return nil, fmt.Errorf("invalid sort field: %s", req.Sort)
 		}
@@ -62,25 +62,25 @@ func (recevicer *alertHistoryService) ListHistory(ctx context.Context, req *type
 // 提取过滤逻辑，提高可读性
 func (s *alertHistoryService) buildHistoryFilter(query store.IAlertHistoryDo, req *types.AlertHistoryListRequest) store.IAlertHistoryDo {
 	if req.Cluster != "" {
-		query = query.Where(al.Cluster.Eq(req.Cluster))
+		query = query.Where(aHistory.Cluster.Eq(req.Cluster))
 	}
 	if req.StartsAt != nil {
-		query = query.Where(al.StartsAt.Gt(*req.StartsAt))
+		query = query.Where(aHistory.StartsAt.Gt(*req.StartsAt))
 	}
 	if req.EndsAt != nil {
-		query = query.Where(al.EndsAt.Gt(*req.EndsAt))
+		query = query.Where(aHistory.EndsAt.Gt(*req.EndsAt))
 	}
 	if req.AlertName != "" {
-		query = query.Where(al.Alertname.Like(req.AlertName + "%"))
+		query = query.Where(aHistory.Alertname.Like(req.AlertName + "%"))
 	}
 	if req.Fingerprint != "" {
-		query = query.Where(al.Fingerprint.Like(req.Fingerprint + "%"))
+		query = query.Where(aHistory.Fingerprint.Like(req.Fingerprint + "%"))
 	}
 	if req.Severity != "" {
-		query = query.Where(al.Severity.Eq(req.Severity))
+		query = query.Where(aHistory.Severity.Eq(req.Severity))
 	}
 	if req.Instance != "" {
-		query = query.Where(al.Instance.Eq(req.Instance))
+		query = query.Where(aHistory.Instance.Eq(req.Instance))
 	}
 
 	if len(req.Labels) > 0 {

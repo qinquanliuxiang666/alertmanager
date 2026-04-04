@@ -32,7 +32,7 @@ func NewAlertTemplateServicer(cache store.CacheStorer) AlertTemplateServicer {
 }
 
 func (receiver *alertTemplateService) CreateAlerTemplate(ctx context.Context, req *types.AlertTemplateCreateRequest) error {
-	storeObj, err := at.WithContext(ctx).Where(at.Name.Eq(req.Name)).First()
+	storeObj, err := aTemlpate.WithContext(ctx).Where(aTemlpate.Name.Eq(req.Name)).First()
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
@@ -60,11 +60,11 @@ func (receiver *alertTemplateService) CreateAlerTemplate(ctx context.Context, re
 		Template:            string(templateBy),
 		AggregationTemplate: string(aggTemplateBy),
 	}
-	return at.WithContext(ctx).Create(saveObj)
+	return aTemlpate.WithContext(ctx).Create(saveObj)
 }
 
 func (receiver *alertTemplateService) UpdateTemplate(ctx context.Context, req *types.AlertTemplateUpdateRequest) error {
-	obj, err := at.WithContext(ctx).Where(at.ID.Eq(int(req.ID))).First()
+	obj, err := aTemlpate.WithContext(ctx).Where(aTemlpate.ID.Eq(int(req.ID))).First()
 	if err != nil {
 		return err
 	}
@@ -87,12 +87,12 @@ func (receiver *alertTemplateService) UpdateTemplate(ctx context.Context, req *t
 	obj.Description = req.Description
 
 	var acObj *model.AlertChannel
-	acObj, err = ac.WithContext(ctx).Where(ac.AlertTemplateID.Eq(int(req.ID))).First()
+	acObj, err = aChannel.WithContext(ctx).Where(aChannel.AlertTemplateID.Eq(int(req.ID))).First()
 	if err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
-		return at.WithContext(ctx).Save(obj)
+		return aTemlpate.WithContext(ctx).Save(obj)
 	}
 
 	return store.Q.Transaction(func(tx *store.Query) error {
@@ -111,12 +111,12 @@ func (receiver *alertTemplateService) UpdateTemplate(ctx context.Context, req *t
 }
 
 func (receiver *alertTemplateService) DeleteTemplate(ctx context.Context, req *types.IDRequest) error {
-	_, err := at.WithContext(ctx).Where(at.ID.Eq(int(req.ID))).First()
+	_, err := aTemlpate.WithContext(ctx).Where(aTemlpate.ID.Eq(int(req.ID))).First()
 	if err != nil {
 		return err
 	}
 
-	acObj, err := ac.WithContext(ctx).Where(ac.AlertTemplateID.Eq(int(req.ID))).First()
+	acObj, err := aChannel.WithContext(ctx).Where(aChannel.AlertTemplateID.Eq(int(req.ID))).First()
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
@@ -125,14 +125,14 @@ func (receiver *alertTemplateService) DeleteTemplate(ctx context.Context, req *t
 		return fmt.Errorf("当前模板已绑定 [%s] 告警通道，请先解除绑定", acObj.Name)
 	}
 
-	if _, err := at.WithContext(ctx).Where(at.ID.Eq(int(req.ID))).Delete(); err != nil {
+	if _, err := aTemlpate.WithContext(ctx).Where(aTemlpate.ID.Eq(int(req.ID))).Delete(); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (receiver *alertTemplateService) QueryTemplate(ctx context.Context, req *types.IDRequest) (*model.AlertTemplate, error) {
-	obj, err := at.WithContext(ctx).Where(at.ID.Eq(int(req.ID))).First()
+	obj, err := aTemlpate.WithContext(ctx).Where(aTemlpate.ID.Eq(int(req.ID))).First()
 	if err != nil {
 		return nil, err
 	}
@@ -144,12 +144,12 @@ func (receiver *alertTemplateService) ListTemplate(ctx context.Context, req *typ
 	var (
 		alertTemplates []*model.AlertTemplate
 		total          int64
-		sql            = at.WithContext(ctx)
+		sql            = aTemlpate.WithContext(ctx)
 		err            error
 	)
 
 	if req.Name != "" {
-		sql = sql.Where(at.Name.Like("%" + req.Name + "%"))
+		sql = sql.Where(aTemlpate.Name.Like("%" + req.Name + "%"))
 	}
 
 	if total, err = sql.Count(); err != nil {
@@ -157,7 +157,7 @@ func (receiver *alertTemplateService) ListTemplate(ctx context.Context, req *typ
 	}
 
 	if req.Sort != "" && req.Direction != "" {
-		sort, ok := at.GetFieldByName(req.Sort)
+		sort, ok := aTemlpate.GetFieldByName(req.Sort)
 		if !ok {
 			return nil, fmt.Errorf("invalid sort field: %s", req.Sort)
 		}

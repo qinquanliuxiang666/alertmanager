@@ -23,9 +23,12 @@ type AlertHistory struct {
 	Annotations       datatypes.JSON   `gorm:"column:annotations;type:json;comment:告警详情/注解" json:"annotations"`
 	AlertChannelID    int              `gorm:"column:alert_channel_id;not null;index;comment:关联的告警发送通道ID" json:"alertChannelId"`
 	AlertChannel      *AlertChannel    `gorm:"foreignKey:AlertChannelID" json:"alertChannel"`
-	AlertSendRecordID int              `gorm:"column:alert_send_record_id;not null;index;comment:关联的告警发送记录ID" json:"alertSendRecordID"`
+	AlertSendRecordID *int             `gorm:"column:alert_send_record_id;index;comment:关联的告警发送记录ID" json:"alertSendRecordID"`
 	AlertSendRecord   *AlertSendRecord `gorm:"foreignKey:AlertSendRecordID" json:"alertSendRecord"`
 	SendCount         int              `gorm:"column:send_count;type:int;size:3;comment:告警发送次数" json:"sendCount"`
+	IsSilenced        bool             `gorm:"column:is_silenced;index;default:false;comment:是否被静默" json:"isSilenced"`
+	AlertSilenceID    int              `gorm:"column:alert_silence_id;index;comment:关联的静默规则ID" json:"alertSilenceID"`
+	AlertSilence      *AlertSilence    `gorm:"foreignKey:AlertSilenceID"`
 }
 
 func (*AlertHistory) TableName() string {

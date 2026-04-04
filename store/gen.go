@@ -20,6 +20,7 @@ var (
 	AlertChannel    *alertChannel
 	AlertHistory    *alertHistory
 	AlertSendRecord *alertSendRecord
+	AlertSilence    *alertSilence
 	AlertTemplate   *alertTemplate
 	Api             *api
 	CasbinRule      *casbinRule
@@ -33,6 +34,7 @@ func SetDefault(db *gorm.DB, opts ...gen.DOOption) {
 	AlertChannel = &Q.AlertChannel
 	AlertHistory = &Q.AlertHistory
 	AlertSendRecord = &Q.AlertSendRecord
+	AlertSilence = &Q.AlertSilence
 	AlertTemplate = &Q.AlertTemplate
 	Api = &Q.Api
 	CasbinRule = &Q.CasbinRule
@@ -47,6 +49,7 @@ func Use(db *gorm.DB, opts ...gen.DOOption) *Query {
 		AlertChannel:    newAlertChannel(db, opts...),
 		AlertHistory:    newAlertHistory(db, opts...),
 		AlertSendRecord: newAlertSendRecord(db, opts...),
+		AlertSilence:    newAlertSilence(db, opts...),
 		AlertTemplate:   newAlertTemplate(db, opts...),
 		Api:             newApi(db, opts...),
 		CasbinRule:      newCasbinRule(db, opts...),
@@ -62,6 +65,7 @@ type Query struct {
 	AlertChannel    alertChannel
 	AlertHistory    alertHistory
 	AlertSendRecord alertSendRecord
+	AlertSilence    alertSilence
 	AlertTemplate   alertTemplate
 	Api             api
 	CasbinRule      casbinRule
@@ -78,6 +82,7 @@ func (q *Query) clone(db *gorm.DB) *Query {
 		AlertChannel:    q.AlertChannel.clone(db),
 		AlertHistory:    q.AlertHistory.clone(db),
 		AlertSendRecord: q.AlertSendRecord.clone(db),
+		AlertSilence:    q.AlertSilence.clone(db),
 		AlertTemplate:   q.AlertTemplate.clone(db),
 		Api:             q.Api.clone(db),
 		CasbinRule:      q.CasbinRule.clone(db),
@@ -101,6 +106,7 @@ func (q *Query) ReplaceDB(db *gorm.DB) *Query {
 		AlertChannel:    q.AlertChannel.replaceDB(db),
 		AlertHistory:    q.AlertHistory.replaceDB(db),
 		AlertSendRecord: q.AlertSendRecord.replaceDB(db),
+		AlertSilence:    q.AlertSilence.replaceDB(db),
 		AlertTemplate:   q.AlertTemplate.replaceDB(db),
 		Api:             q.Api.replaceDB(db),
 		CasbinRule:      q.CasbinRule.replaceDB(db),
@@ -114,6 +120,7 @@ type queryCtx struct {
 	AlertChannel    IAlertChannelDo
 	AlertHistory    IAlertHistoryDo
 	AlertSendRecord IAlertSendRecordDo
+	AlertSilence    IAlertSilenceDo
 	AlertTemplate   IAlertTemplateDo
 	Api             IApiDo
 	CasbinRule      ICasbinRuleDo
@@ -127,6 +134,7 @@ func (q *Query) WithContext(ctx context.Context) *queryCtx {
 		AlertChannel:    q.AlertChannel.WithContext(ctx),
 		AlertHistory:    q.AlertHistory.WithContext(ctx),
 		AlertSendRecord: q.AlertSendRecord.WithContext(ctx),
+		AlertSilence:    q.AlertSilence.WithContext(ctx),
 		AlertTemplate:   q.AlertTemplate.WithContext(ctx),
 		Api:             q.Api.WithContext(ctx),
 		CasbinRule:      q.CasbinRule.WithContext(ctx),

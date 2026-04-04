@@ -43,6 +43,8 @@ func newAlertHistory(db *gorm.DB, opts ...gen.DOOption) alertHistory {
 	_alertHistory.AlertChannelID = field.NewInt(tableName, "alert_channel_id")
 	_alertHistory.AlertSendRecordID = field.NewInt(tableName, "alert_send_record_id")
 	_alertHistory.SendCount = field.NewInt(tableName, "send_count")
+	_alertHistory.IsSilenced = field.NewBool(tableName, "is_silenced")
+	_alertHistory.AlertSilenceID = field.NewInt(tableName, "alert_silence_id")
 	_alertHistory.AlertChannel = alertHistoryBelongsToAlertChannel{
 		db: db.Session(&gorm.Session{}),
 
@@ -66,6 +68,9 @@ func newAlertHistory(db *gorm.DB, opts ...gen.DOOption) alertHistory {
 			AlertSendRecord struct {
 				field.RelationField
 			}
+			AlertSilence struct {
+				field.RelationField
+			}
 		}{
 			RelationField: field.NewRelation("AlertSendRecord.AlertHistory", "model.AlertHistory"),
 			AlertChannel: struct {
@@ -78,7 +83,18 @@ func newAlertHistory(db *gorm.DB, opts ...gen.DOOption) alertHistory {
 			}{
 				RelationField: field.NewRelation("AlertSendRecord.AlertHistory.AlertSendRecord", "model.AlertSendRecord"),
 			},
+			AlertSilence: struct {
+				field.RelationField
+			}{
+				RelationField: field.NewRelation("AlertSendRecord.AlertHistory.AlertSilence", "model.AlertSilence"),
+			},
 		},
+	}
+
+	_alertHistory.AlertSilence = alertHistoryBelongsToAlertSilence{
+		db: db.Session(&gorm.Session{}),
+
+		RelationField: field.NewRelation("AlertSilence", "model.AlertSilence"),
 	}
 
 	_alertHistory.fillFieldMap()
@@ -105,9 +121,13 @@ type alertHistory struct {
 	AlertChannelID    field.Int    // 关联的告警发送通道ID
 	AlertSendRecordID field.Int    // 关联的告警发送记录ID
 	SendCount         field.Int    // 告警发送次数
+	IsSilenced        field.Bool   // 是否被静默
+	AlertSilenceID    field.Int    // 关联的静默规则ID
 	AlertChannel      alertHistoryBelongsToAlertChannel
 
 	AlertSendRecord alertHistoryBelongsToAlertSendRecord
+
+	AlertSilence alertHistoryBelongsToAlertSilence
 
 	fieldMap map[string]field.Expr
 }
@@ -139,6 +159,8 @@ func (a *alertHistory) updateTableName(table string) *alertHistory {
 	a.AlertChannelID = field.NewInt(table, "alert_channel_id")
 	a.AlertSendRecordID = field.NewInt(table, "alert_send_record_id")
 	a.SendCount = field.NewInt(table, "send_count")
+	a.IsSilenced = field.NewBool(table, "is_silenced")
+	a.AlertSilenceID = field.NewInt(table, "alert_silence_id")
 
 	a.fillFieldMap()
 
@@ -155,7 +177,7 @@ func (a *alertHistory) GetFieldByName(fieldName string) (field.OrderExpr, bool) 
 }
 
 func (a *alertHistory) fillFieldMap() {
-	a.fieldMap = make(map[string]field.Expr, 17)
+	a.fieldMap = make(map[string]field.Expr, 20)
 	a.fieldMap["id"] = a.ID
 	a.fieldMap["cluster"] = a.Cluster
 	a.fieldMap["created_at"] = a.CreatedAt
@@ -171,6 +193,8 @@ func (a *alertHistory) fillFieldMap() {
 	a.fieldMap["alert_channel_id"] = a.AlertChannelID
 	a.fieldMap["alert_send_record_id"] = a.AlertSendRecordID
 	a.fieldMap["send_count"] = a.SendCount
+	a.fieldMap["is_silenced"] = a.IsSilenced
+	a.fieldMap["alert_silence_id"] = a.AlertSilenceID
 
 }
 
@@ -180,6 +204,8 @@ func (a alertHistory) clone(db *gorm.DB) alertHistory {
 	a.AlertChannel.db.Statement.ConnPool = db.Statement.ConnPool
 	a.AlertSendRecord.db = db.Session(&gorm.Session{Initialized: true})
 	a.AlertSendRecord.db.Statement.ConnPool = db.Statement.ConnPool
+	a.AlertSilence.db = db.Session(&gorm.Session{Initialized: true})
+	a.AlertSilence.db.Statement.ConnPool = db.Statement.ConnPool
 	return a
 }
 
@@ -187,6 +213,7 @@ func (a alertHistory) replaceDB(db *gorm.DB) alertHistory {
 	a.alertHistoryDo.ReplaceDB(db)
 	a.AlertChannel.db = db.Session(&gorm.Session{})
 	a.AlertSendRecord.db = db.Session(&gorm.Session{})
+	a.AlertSilence.db = db.Session(&gorm.Session{})
 	return a
 }
 
@@ -288,6 +315,9 @@ type alertHistoryBelongsToAlertSendRecord struct {
 		AlertSendRecord struct {
 			field.RelationField
 		}
+		AlertSilence struct {
+			field.RelationField
+		}
 	}
 }
 
@@ -362,6 +392,87 @@ func (a alertHistoryBelongsToAlertSendRecordTx) Count() int64 {
 }
 
 func (a alertHistoryBelongsToAlertSendRecordTx) Unscoped() *alertHistoryBelongsToAlertSendRecordTx {
+	a.tx = a.tx.Unscoped()
+	return &a
+}
+
+type alertHistoryBelongsToAlertSilence struct {
+	db *gorm.DB
+
+	field.RelationField
+}
+
+func (a alertHistoryBelongsToAlertSilence) Where(conds ...field.Expr) *alertHistoryBelongsToAlertSilence {
+	if len(conds) == 0 {
+		return &a
+	}
+
+	exprs := make([]clause.Expression, 0, len(conds))
+	for _, cond := range conds {
+		exprs = append(exprs, cond.BeCond().(clause.Expression))
+	}
+	a.db = a.db.Clauses(clause.Where{Exprs: exprs})
+	return &a
+}
+
+func (a alertHistoryBelongsToAlertSilence) WithContext(ctx context.Context) *alertHistoryBelongsToAlertSilence {
+	a.db = a.db.WithContext(ctx)
+	return &a
+}
+
+func (a alertHistoryBelongsToAlertSilence) Session(session *gorm.Session) *alertHistoryBelongsToAlertSilence {
+	a.db = a.db.Session(session)
+	return &a
+}
+
+func (a alertHistoryBelongsToAlertSilence) Model(m *model.AlertHistory) *alertHistoryBelongsToAlertSilenceTx {
+	return &alertHistoryBelongsToAlertSilenceTx{a.db.Model(m).Association(a.Name())}
+}
+
+func (a alertHistoryBelongsToAlertSilence) Unscoped() *alertHistoryBelongsToAlertSilence {
+	a.db = a.db.Unscoped()
+	return &a
+}
+
+type alertHistoryBelongsToAlertSilenceTx struct{ tx *gorm.Association }
+
+func (a alertHistoryBelongsToAlertSilenceTx) Find() (result *model.AlertSilence, err error) {
+	return result, a.tx.Find(&result)
+}
+
+func (a alertHistoryBelongsToAlertSilenceTx) Append(values ...*model.AlertSilence) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Append(targetValues...)
+}
+
+func (a alertHistoryBelongsToAlertSilenceTx) Replace(values ...*model.AlertSilence) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Replace(targetValues...)
+}
+
+func (a alertHistoryBelongsToAlertSilenceTx) Delete(values ...*model.AlertSilence) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Delete(targetValues...)
+}
+
+func (a alertHistoryBelongsToAlertSilenceTx) Clear() error {
+	return a.tx.Clear()
+}
+
+func (a alertHistoryBelongsToAlertSilenceTx) Count() int64 {
+	return a.tx.Count()
+}
+
+func (a alertHistoryBelongsToAlertSilenceTx) Unscoped() *alertHistoryBelongsToAlertSilenceTx {
 	a.tx = a.tx.Unscoped()
 	return &a
 }

@@ -5,15 +5,16 @@ import (
 )
 
 var (
-	u      = store.User
-	r      = store.Role
-	a      = store.Api
-	c      = store.CasbinRule
-	oauth2 = store.Oauth2User
-	al     = store.AlertHistory
-	ac     = store.AlertChannel
-	at     = store.AlertTemplate
-	as     = store.AlertSendRecord
+	u         = store.User
+	r         = store.Role
+	a         = store.Api
+	c         = store.CasbinRule
+	oauth2    = store.Oauth2User
+	aHistory  = store.AlertHistory
+	aChannel  = store.AlertChannel
+	aTemlpate = store.AlertTemplate
+	aSend     = store.AlertSendRecord
+	aSilence  = store.AlertSilence
 )
 
 func NewStore() {
@@ -22,8 +23,9 @@ func NewStore() {
 	a = store.Api
 	c = store.CasbinRule
 	oauth2 = store.Oauth2User
-	al = store.AlertHistory
-	ac = store.AlertChannel
-	at = store.AlertTemplate
-	as = store.AlertSendRecord
+	aHistory = store.AlertHistory
+	aChannel = store.AlertChannel
+	aTemlpate = store.AlertTemplate
+	aSend = store.AlertSendRecord
+	aSilence = store.AlertSilence
 }

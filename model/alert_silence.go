@@ -7,6 +7,11 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	SilenceDisabled = iota
+	SilenceEnabled  = iota
+)
+
 // AlertSilence 静默规则表
 type AlertSilence struct {
 	ID        int            `gorm:"primaryKey;autoIncrement"`
@@ -14,12 +19,12 @@ type AlertSilence struct {
 	UpdatedAt time.Time      `gorm:"column:updated_at" json:"updatedAt,omitempty"`
 	DeletedAt gorm.DeletedAt `gorm:"column:deleted_at;index" json:"-"`
 	Cluster   string         `gorm:"type:varchar(128);index;comment:所属集群/租户"`
-	Matchers  datatypes.JSON `gorm:"type:json;not null;comment:匹配器集合 [{name:x, value:y, type:z}]"`
+	Matchers  datatypes.JSON `gorm:"type:json;not null;comment:匹配器集合 [{\"name\": \"x\", \"value\": \"y\", \"type\": \"z\"}]"`
 	StartsAt  time.Time      `gorm:"index;comment:开始时间"`
 	EndsAt    time.Time      `gorm:"index;comment:结束时间"`
 	CreatedBy string         `gorm:"type:varchar(64)"`
 	Comment   string         `gorm:"type:text;comment:静默原因"`
-	Status    int            `gorm:"type:tinyint;default:1;comment:状态 1:启用 2:手动禁用"`
+	Status    *int           `gorm:"type:tinyint;default:1;comment:状态 0:禁用 1: 启用"`
 }
 
 // Matcher 匹配器具体结构

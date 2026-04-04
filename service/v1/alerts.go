@@ -2,7 +2,9 @@ package v1
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"regexp"
 	"runtime/debug"
 	"time"
 
@@ -48,7 +50,7 @@ func NewCleanDuplicateFiringer(cache store.CacheStorer) CleanDuplicateFiringer {
 }
 
 func (receiver *alertsService) SendAlert(ctx context.Context, req *types.AlertReceiveReq) error {
-	log.WithRequestID(ctx).Info("接收告警数据", zap.Any("data", req))
+	log.WithRequestID(ctx).Debug("接收告警数据", zap.Any("data", req))
 	// 获取告警发送Channel
 	alertChannel, err := receiver.getChannel(ctx, req.ChannelName)
 	if err != nil {
@@ -70,7 +72,7 @@ func (receiver *alertsService) SendAlert(ctx context.Context, req *types.AlertRe
 	notifyReq.AlertChannel = alertChannel
 	notifyReq.AlertReceiveReq = req
 
-	log.WithRequestID(ctx).Info("通过告警通道发送告警", zap.String("channelName", alertChannel.Name))
+	log.WithRequestID(ctx).Info("通过告警通道发送告警", zap.Any("notifyReq", notifyReq))
 	var sendResult *types.NotifySendResult
 	switch alertChannel.Type {
 	case model.ChannelTypeFeishuApp:
@@ -100,7 +102,7 @@ func (receiver *alertsService) getChannel(ctx context.Context, channelName strin
 	}
 
 	if !found {
-		channel, err := ac.WithContext(ctx).Preload(ac.AlertTemplate).Where(ac.Name.Eq(channelName)).First()
+		channel, err := aChannel.WithContext(ctx).Preload(aChannel.AlertTemplate).Where(aChannel.Name.Eq(channelName)).First()
 		if err != nil {
 			return nil, err
 		}
@@ -132,6 +134,7 @@ func (receiver *alertsService) getChannel(ctx context.Context, channelName strin
 // aggregatedAlarmGrouping 聚合告警分组
 // 如果通知为聚合告警时, 需要将告警分配 firing 和 resolved 两组, 分别发送
 func (receiver *alertsService) aggregatedAlarmGrouping(ctx context.Context, tenantValue string, alerts []*types.Alert) (*types.NotifyReq, error) {
+	log.WithRequestID(ctx).Debug("aggregatedAlarmGrouping", zap.String("tenantValue", tenantValue))
 	alertLen := len(alerts)
 	if alertLen == 0 {
 		return nil, fmt.Errorf("alerts 为空, 告警分组失败")
@@ -144,18 +147,21 @@ func (receiver *alertsService) aggregatedAlarmGrouping(ctx context.Context, tena
 		queryArgs         [][]interface{}
 		resolvedAlertMap  = make(map[string]*types.Alert, alertLen)
 		firingAlertMap    = make(map[string]*types.Alert, alertLen)
+		silencedAlertMap  = make(map[string]*types.Alert)
 		firingAlertArry   = make([]*types.Alert, 0, alertLen)
 		resolvedAlertArry = make([]*types.Alert, 0, alertLen)
+		activeSilences    []*model.AlertSilence
+		now               = time.Now()
 	)
 
+	// 查询已经存在的告警
 	for i := range alerts {
 		queryArgs = append(queryArgs, []interface{}{
 			alerts[i].Fingerprint,
 			alerts[i].StartsAt.Truncate(time.Millisecond),
 		})
 	}
-
-	err := al.WithContext(ctx).
+	err := aHistory.WithContext(ctx).
 		UnderlyingDB().
 		Preload("AlertSendRecord").
 		Where(tenantWhere, tenantValue).
@@ -165,6 +171,19 @@ func (receiver *alertsService) aggregatedAlarmGrouping(ctx context.Context, tena
 		return nil, err
 	}
 
+	// 查询静默规则
+	err = aSilence.WithContext(ctx).
+		UnderlyingDB().
+		Where(tenantWhere, tenantValue).
+		Where(aSilence.Status.Eq(model.SilenceEnabled)).
+		Where(aSilence.StartsAt.Lte(now)).
+		Where(aSilence.EndsAt.Gte(now)).
+		Find(&activeSilences).Error
+	if err != nil {
+		zap.L().Error("查询静默规则失败", zap.Error(err))
+	}
+
+	// 转换历史记录为 Map 方便对比
 	for i := range existingHistories {
 		key := helper.GetAlertMapKey(existingHistories[i].Fingerprint, existingHistories[i].StartsAt)
 		existingHistorMap[key] = existingHistories[i]
@@ -172,33 +191,38 @@ func (receiver *alertsService) aggregatedAlarmGrouping(ctx context.Context, tena
 
 	for i := range alerts {
 		key := helper.GetAlertMapKey(alerts[i].Fingerprint, alerts[i].StartsAt)
+		// 在这里处理静默.如果静默保存到静默map里.然后更新数据了
+		// --- 处理 Firing 状态 ---
 		if alerts[i].Status == constant.AlertStatusFiring {
-			// 告警逻辑
-			// TODO 判断告警静默,如果静默continue
-			silence, err := receiver.getSilence(ctx, alerts[i])
-			if err != nil {
-				zap.L().Error("判断静默失败", zap.Error(err))
+			// 如果是 Firing 那么将 EndsAt 设置为 nil
+			alerts[i].EndsAt = nil
+
+			// 校验静默
+			isSilenced, silenceID := receiver.isSilenced(alerts[i], activeSilences)
+			if isSilenced {
+				alerts[i].IsSilenced = true
+				alerts[i].SilenceID = silenceID
+				silencedAlertMap[key] = alerts[i]
+				zap.L().Info("告警被静默", zap.String("fingerprint", alerts[i].Fingerprint), zap.Int("silenceID", silenceID))
+				// 被静默的告警不进入 firingAlertArry，不触发发送
 				continue
 			}
 
-			if silence {
-				continue
-			}
-			// 如果是 Firing 那么将 EndsAt 设置为 nil
 			alerts[i].EndsAt = nil
 			firingAlertMap[key] = alerts[i]
 			firingAlertArry = append(firingAlertArry, alerts[i])
 		}
 
+		// --- 处理 Resolved 状态 ---
 		if alerts[i].Status == constant.AlertStatusResolved {
 			if existingHistor, ok := existingHistorMap[key]; ok {
 				if existingHistor.Status == constant.AlertStatusResolved {
 					delete(existingHistorMap, key)
+					continue
 				}
-			} else {
-				resolvedAlertArry = append(resolvedAlertArry, alerts[i])
-				resolvedAlertMap[key] = alerts[i]
 			}
+			resolvedAlertArry = append(resolvedAlertArry, alerts[i])
+			resolvedAlertMap[key] = alerts[i]
 		}
 	}
 	notifyReq.ExistingAlertMap = existingHistorMap
@@ -206,13 +230,9 @@ func (receiver *alertsService) aggregatedAlarmGrouping(ctx context.Context, tena
 	notifyReq.AlertArry.ResolvedAlertArry = resolvedAlertArry
 	notifyReq.AlertMap.FiringAlertMap = firingAlertMap
 	notifyReq.AlertMap.ResolvedAlertMap = resolvedAlertMap
+	notifyReq.AlertMap.SilencedAlertMap = silencedAlertMap
 
 	return notifyReq, nil
-}
-
-// TODO getSilence
-func (receiver *alertsService) getSilence(ctx context.Context, alert *types.Alert) (silence bool, err error) {
-	return silence, nil
 }
 
 // saveAlerts 将告警记录持久化到数据库
@@ -227,19 +247,15 @@ func (receiver *alertsService) saveAlerts(ctx context.Context, notifyReq *types.
 		}
 	}()
 
-	log.WithRequestID(ctx).Info("告警数据开始持久化")
+	log.WithRequestID(ctx).Debug("告警数据开始持久化")
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-
-	// firingAlertsMap, resolvedAlertsMap := receiver.getAlertsMap(notifyReq.NotifyAlerts)
 	var (
 		allCreateSendRecords []*model.AlertSendRecord
 		allUpdateSendRecords []*model.AlertSendRecord
 		allUpdateAlerts      []*model.AlertHistory
 	)
-
-	log.WithRequestID(ctx).Debug("告警记录处理完成, 开始批量持久化")
 
 	var sharedAggRecord []*model.AlertSendRecord
 	batches := []map[string]*types.Alert{notifyReq.AlertMap.FiringAlertMap, notifyReq.AlertMap.ResolvedAlertMap}
@@ -262,35 +278,58 @@ func (receiver *alertsService) saveAlerts(ctx context.Context, notifyReq *types.
 		sharedAggRecord = append(sharedAggRecord, res.sharedAggRecord)
 	}
 
-	// 批量创建和更新
+	// --- 单独处理静默告警 ---
+	silenceCreate, silenceUpdate := receiver.processSilencedAlerts(notifyReq)
+	allUpdateAlerts = append(allUpdateAlerts, silenceUpdate...)
+	log.WithRequestID(ctx).Debug("合并告警",
+		zap.Any("allCreateSendRecords", allCreateSendRecords),
+		zap.Any("allCreateSendRecords", allCreateSendRecords),
+		zap.Any("allUpdateAlerts", allUpdateAlerts),
+		zap.Any("sharedAggRecord", sharedAggRecord),
+	)
+
+	log.WithRequestID(ctx).Debug("告警记录处理完成, 开始批量持久化")
+	// 批量创建带有发送流水的告警 (Firing/Resolved)
 	if len(allCreateSendRecords) > 0 {
 		zap.L().Debug("批量创建告警历史记录")
-		if err := as.WithContext(ctx).Create(allCreateSendRecords...); err != nil {
+		if err := aSend.WithContext(ctx).Create(allCreateSendRecords...); err != nil {
 			log.WithRequestID(ctx).Error("批量创建告警历史记录失败", zap.Error(err))
 		}
 	}
 
+	// 批量创建静默告警 (只有 History)
+	if len(silenceCreate) > 0 {
+		zap.L().Debug("批量创建静默告警历史")
+		if err := aHistory.WithContext(ctx).Create(silenceCreate...); err != nil {
+			log.WithRequestID(ctx).Error("批量创建静默告警历史失败", zap.Error(err))
+		}
+	}
+
+	// 更新发送记录 (ErrorMessage 等)
 	if len(allUpdateSendRecords) > 0 {
 		zap.L().Debug("更新告警发送记录")
 		for _, updateSendRecord := range allUpdateSendRecords {
 			upObj := model.AlertSendRecord{
 				ErrorMessage: updateSendRecord.ErrorMessage,
 			}
-			if _, err := as.WithContext(timeoutCtx).Where(as.ID.Eq(updateSendRecord.ID)).Updates(upObj); err != nil {
+			if _, err := aSend.WithContext(timeoutCtx).Where(aSend.ID.Eq(updateSendRecord.ID)).Updates(upObj); err != nil {
 				log.WithRequestID(ctx).Error("批量更新告警发送记录失败", zap.Error(err))
 				continue
 			}
 		}
 	}
+
+	// 更新告警历史 (状态、结束时间、静默标记等)
 	if len(allUpdateAlerts) > 0 {
 		for _, updateAlert := range allUpdateAlerts {
-			zap.L().Debug("更新告警历史记录")
 			upMap := map[string]interface{}{
-				"status":     updateAlert.Status,
-				"ends_at":    updateAlert.EndsAt,
-				"send_count": updateAlert.SendCount,
+				"status":           updateAlert.Status,
+				"ends_at":          updateAlert.EndsAt,
+				"send_count":       updateAlert.SendCount,
+				"is_silenced":      updateAlert.IsSilenced,
+				"alert_silence_id": updateAlert.AlertSilenceID,
 			}
-			if _, err := al.WithContext(timeoutCtx).Where(al.ID.Eq(updateAlert.ID)).Updates(upMap); err != nil {
+			if _, err := aHistory.WithContext(timeoutCtx).Where(aHistory.ID.Eq(updateAlert.ID)).Updates(upMap); err != nil {
 				log.WithRequestID(ctx).Error("批量更新告警历史记录失败", zap.Error(err))
 				continue
 			}
@@ -528,4 +567,100 @@ func (receiver *alertsService) CleanDuplicateFiringAlertsTask() {
 		}
 		zap.L().Info("[定时任务] 重复告警清理任务完成", zap.Int("total_resolved", len(idsToResolve)))
 	}
+}
+
+func (receiver *alertsService) isSilenced(alert *types.Alert, silences []*model.AlertSilence) (bool, int) {
+	if len(silences) == 0 {
+		return false, 0
+	}
+
+	alertLabels := alert.Labels
+
+	for _, silence := range silences {
+		var matchers []model.Matcher
+		if err := json.Unmarshal(silence.Matchers, &matchers); err != nil {
+			continue
+		}
+		// 时间窗口判断 (告警开始时间必须在静默期内)
+		if alert.StartsAt.Before(silence.StartsAt) || alert.StartsAt.After(silence.EndsAt) {
+			continue
+		}
+
+		allMatch := true
+		for _, m := range matchers {
+			val, ok := alertLabels[m.Name]
+			if !ok {
+				allMatch = false
+				break
+			}
+
+			switch m.Type {
+			case "=":
+				if val != m.Value {
+					allMatch = false
+				}
+			case "!=":
+				if val == m.Value {
+					allMatch = false
+				}
+			case "=~":
+				// 注意：在生产环境下，建议提前在外部 Compile 好正则，此处直接使用对象
+				matched, _ := regexp.MatchString("^("+m.Value+")$", val)
+				if !matched {
+					allMatch = false
+				}
+			case "!~":
+				matched, _ := regexp.MatchString("^("+m.Value+")$", val)
+				if matched {
+					allMatch = false
+				}
+			default:
+				allMatch = false
+			}
+
+			if !allMatch {
+				break
+			}
+		}
+
+		// 如果匹配器全部匹配，则返回成功及其静默规则 ID
+		if allMatch {
+			return true, silence.ID
+		}
+	}
+	return false, 0
+}
+
+func (receiver *alertsService) processSilencedAlerts(notifyReq *types.NotifyReq) (createAlerts, updateAlerts []*model.AlertHistory) {
+	silencedMap := notifyReq.AlertMap.SilencedAlertMap
+	if len(silencedMap) == 0 {
+		return
+	}
+
+	for key, alert := range silencedMap {
+		storeHistory, exist := notifyReq.ExistingAlertMap[key]
+
+		if exist {
+			// 如果已存在且是 Firing，且本次被静默了
+			storeHistory.EndsAt = alert.EndsAt
+			storeHistory.SendCount += 1
+			storeHistory.Status = alert.Status
+			storeHistory.IsSilenced = true
+			storeHistory.AlertSilenceID = alert.SilenceID // 记录是哪个规则静默的
+			updateAlerts = append(updateAlerts, storeHistory)
+		} else {
+			// 新告警即被静默
+			alertHistory, err := types.ConvertToModel(receiver.tenantKey, alert, notifyReq.AlertChannel.ID)
+			if err != nil {
+				zap.L().Error("转换静默告警模型失败", zap.Error(err))
+				continue
+			}
+
+			alertHistory.IsSilenced = true
+			alertHistory.AlertSilenceID = alert.SilenceID
+			alertHistory.AlertSendRecordID = nil
+			createAlerts = append(createAlerts, alertHistory)
+		}
+	}
+	return
 }

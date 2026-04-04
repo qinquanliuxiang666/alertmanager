@@ -64,6 +64,11 @@ func newAlertSendRecord(db *gorm.DB, opts ...gen.DOOption) alertSendRecord {
 				RelationField: field.NewRelation("AlertHistory.AlertSendRecord.AlertHistory", "model.AlertHistory"),
 			},
 		},
+		AlertSilence: struct {
+			field.RelationField
+		}{
+			RelationField: field.NewRelation("AlertHistory.AlertSilence", "model.AlertSilence"),
+		},
 	}
 
 	_alertSendRecord.fillFieldMap()
@@ -159,6 +164,9 @@ type alertSendRecordHasManyAlertHistory struct {
 		AlertHistory struct {
 			field.RelationField
 		}
+	}
+	AlertSilence struct {
+		field.RelationField
 	}
 }
 

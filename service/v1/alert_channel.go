@@ -33,7 +33,7 @@ func NewChannelServicer(cache store.CacheStorer) AlertChannelServicer {
 }
 
 func (receiver *alertChannelService) CreateAlerChannel(ctx context.Context, req *types.AlertChannelCreateRequest) error {
-	_, err := ac.WithContext(ctx).Unscoped().Where(ac.Name.Eq(req.Name)).First()
+	_, err := aChannel.WithContext(ctx).Unscoped().Where(aChannel.Name.Eq(req.Name)).First()
 	if err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
@@ -57,15 +57,15 @@ func (receiver *alertChannelService) CreateAlerChannel(ctx context.Context, req 
 			Description:       req.Description,
 		}
 
-		return ac.WithContext(ctx).Create(obj)
+		return aChannel.WithContext(ctx).Create(obj)
 	}
 	return fmt.Errorf("alertChannel 已经存在, 创建失败")
 }
 
 func (receiver *alertChannelService) UpdateChannel(ctx context.Context, req *types.AlertChannelUpdateRequest) error {
-	sql := ac.WithContext(ctx)
+	sql := aChannel.WithContext(ctx)
 
-	acObj, err := sql.Preload(ac.AlertTemplate).Where(ac.ID.Eq(int(req.ID))).First()
+	acObj, err := sql.Preload(aChannel.AlertTemplate).Where(aChannel.ID.Eq(int(req.ID))).First()
 	if err != nil {
 		return err
 	}
@@ -97,7 +97,7 @@ func (receiver *alertChannelService) UpdateChannel(ctx context.Context, req *typ
 
 		if *acObj.Status == model.StatusEnabled {
 			if acObj.AlertTemplate == nil {
-				template, err := tx.AlertTemplate.WithContext(ctx).Where(at.ID.Eq(acObj.AlertTemplateID)).First()
+				template, err := tx.AlertTemplate.WithContext(ctx).Where(aTemlpate.ID.Eq(acObj.AlertTemplateID)).First()
 				if err != nil {
 					return err
 				}
@@ -114,15 +114,15 @@ func (receiver *alertChannelService) UpdateChannel(ctx context.Context, req *typ
 }
 
 func (receiver *alertChannelService) DeleteChannel(ctx context.Context, req *types.IDRequest) error {
-	sql := ac.WithContext(ctx)
+	sql := aChannel.WithContext(ctx)
 
-	acObj, err := sql.Where(ac.ID.Eq(int(req.ID))).First()
+	acObj, err := sql.Where(aChannel.ID.Eq(int(req.ID))).First()
 	if err != nil {
 		return err
 	}
 
 	return store.Q.Transaction(func(tx *store.Query) error {
-		_, err := tx.AlertChannel.WithContext(ctx).Unscoped().Where(ac.ID.Eq(acObj.ID)).Delete(acObj)
+		_, err := tx.AlertChannel.WithContext(ctx).Unscoped().Where(aChannel.ID.Eq(acObj.ID)).Delete(acObj)
 		if err != nil {
 			return err
 		}
@@ -134,7 +134,7 @@ func (receiver *alertChannelService) DeleteChannel(ctx context.Context, req *typ
 }
 
 func (receiver *alertChannelService) QueryChannel(ctx context.Context, req *types.IDRequest) (*model.AlertChannel, error) {
-	obj, err := ac.WithContext(ctx).Where(ac.ID.Eq(int(req.ID))).First()
+	obj, err := aChannel.WithContext(ctx).Where(aChannel.ID.Eq(int(req.ID))).First()
 	if err != nil {
 		return nil, err
 	}
@@ -146,14 +146,14 @@ func (receiver *alertChannelService) ListChannel(ctx context.Context, req *types
 	var (
 		alertChannels []*model.AlertChannel
 		total         int64
-		sql           = ac.WithContext(ctx)
+		sql           = aChannel.WithContext(ctx)
 		err           error
 	)
 
 	if req.Name != "" {
-		sql = sql.Where(ac.Name.Like("%" + req.Name + "%"))
+		sql = sql.Where(aChannel.Name.Like("%" + req.Name + "%"))
 	} else if req.Type != "" {
-		sql.Where(ac.Type.Like("%" + req.Type + "%"))
+		sql.Where(aChannel.Type.Like("%" + req.Type + "%"))
 	}
 
 	if total, err = sql.Count(); err != nil {
@@ -161,7 +161,7 @@ func (receiver *alertChannelService) ListChannel(ctx context.Context, req *types
 	}
 
 	if req.Sort != "" && req.Direction != "" {
-		sort, ok := ac.GetFieldByName(req.Sort)
+		sort, ok := aChannel.GetFieldByName(req.Sort)
 		if !ok {
 			return nil, fmt.Errorf("invalid sort field: %s", req.Sort)
 		}

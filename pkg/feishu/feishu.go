@@ -224,6 +224,7 @@ func (receiver *FeiShu) CloseCli(alertChannelName string) {
 }
 
 func (receiver *FeiShu) renderAndSend(ctx context.Context, larkCli *lark.Client, conf *model.FeishuAppConfig, data interface{}, tpl string, color string) error {
+	log.WithRequestID(ctx).Debug("飞书发送告警", zap.Any("data", data))
 	// 1. 渲染模板
 	content, err := RenderingAlertContent().Build(data, tpl)
 	if err != nil {
@@ -358,6 +359,7 @@ func (receiver *FeiShu) Notify(ctx context.Context, notifyReq *types.NotifyReq) 
 	alertArry := notifyReq.AlertArry
 	// 聚合发送告警
 	if *notifyReq.AlertChannel.AggregationStatus == model.AggregationEnabled {
+		log.WithRequestID(ctx).Debug("聚合发送告警")
 		if len(alertArry.FiringAlertArry) > 0 {
 			newReq := notifyReq.AlertReceiveReq.DeepCopy()
 			newReq.Alerts = alertArry.FiringAlertArry
@@ -385,6 +387,7 @@ func (receiver *FeiShu) Notify(ctx context.Context, notifyReq *types.NotifyReq) 
 	}
 
 	if *notifyReq.AlertChannel.AggregationStatus == model.AggregationDisabled {
+		log.WithRequestID(ctx).Debug("非聚合发送告警")
 		// 非聚合发送
 		normalSendResult, err := receiver.
 			singleSend(ctx, larkCli, feishuAppConf, alertChannel, alertArry)

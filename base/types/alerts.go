@@ -32,6 +32,8 @@ type Alert struct {
 	EndsAt       *time.Time        `json:"endsAt"`
 	GeneratorURL string            `json:"generatorURL"`
 	Fingerprint  string            `json:"fingerprint"`
+	IsSilenced   bool              `json:"isSilenced"`
+	SilenceID    int               `json:"silenceID"`
 }
 
 // 辅助函数：将业务 Alert 转换为 DB Model
@@ -101,6 +103,7 @@ type AlertArry struct {
 type AlertMap struct {
 	FiringAlertMap   map[string]*Alert
 	ResolvedAlertMap map[string]*Alert
+	SilencedAlertMap map[string]*Alert
 }
 
 // NotifyAlerts 代表一次告警发送中所有的告警详情，分为正在触发的告警和已恢复的告警两类
